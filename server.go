@@ -21,15 +21,16 @@ import (
 	"context"
 	"sync"
 
-	nacosv1 "github.com/polaris-contrib/nacosserver/v1"
 	"github.com/polarismesh/polaris/apiserver"
-	"github.com/polaris-contrib/nacosserver/core"
 	"github.com/polarismesh/polaris/auth"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/secure"
 	"github.com/polarismesh/polaris/namespace"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
+
+	"github.com/polaris-contrib/nacosserver/core"
+	nacosv1 "github.com/polaris-contrib/nacosserver/v1"
 )
 
 const (

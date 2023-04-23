@@ -23,10 +23,11 @@ import (
 	"sync"
 	"time"
 
-	nacosmodel "github.com/polaris-contrib/nacosserver/model"
 	"github.com/polarismesh/polaris/cache"
 	"github.com/polarismesh/polaris/common/eventhub"
 	"github.com/polarismesh/polaris/common/model"
+
+	nacosmodel "github.com/polaris-contrib/nacosserver/model"
 )
 
 type InstanceFilter func(ctx context.Context, svcInfo *nacosmodel.ServiceInfo,

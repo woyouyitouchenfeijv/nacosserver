@@ -18,8 +18,9 @@
 package core
 
 import (
-	nacosmodel "github.com/polaris-contrib/nacosserver/model"
 	"github.com/polarismesh/polaris/common/model"
+
+	nacosmodel "github.com/polaris-contrib/nacosserver/model"
 )
 
 type PushType string

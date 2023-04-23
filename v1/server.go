@@ -27,14 +27,10 @@ import (
 
 	"github.com/emicklei/go-restful/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/polaris-contrib/nacosserver/core"
 	"github.com/polarismesh/polaris/apiserver"
 	httpcommon "github.com/polarismesh/polaris/apiserver/httpserver/http"
 	"github.com/polarismesh/polaris/auth"
 	api "github.com/polarismesh/polaris/common/api/v1"
-	"github.com/polarismesh/polaris/common/conn/keepalive"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/metrics"
@@ -44,6 +40,10 @@ import (
 	"github.com/polarismesh/polaris/plugin"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
+	"go.uber.org/zap"
+
+	"github.com/polaris-contrib/nacosserver/conn/keepalive"
+	"github.com/polaris-contrib/nacosserver/core"
 )
 
 func NewNacosV1Server(
