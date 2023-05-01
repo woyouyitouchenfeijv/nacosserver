@@ -113,7 +113,7 @@ func (n *NacosServer) Run(errCh chan error) {
 	}
 
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
@@ -125,7 +125,7 @@ func (n *NacosServer) Run(errCh chan error) {
 			nacosv1.WithHealthSvr(n.healthSvr),
 			nacosv1.WithAuthSvr(n.authSvr),
 		)
-		if err := n.v1Svr.Initialize(context.TODO(), n.option, n.httpPort, n.apiConf); err != nil {
+		if err := n.v1Svr.Initialize(context.Background(), n.option, n.httpPort, n.apiConf); err != nil {
 			errCh <- err
 			return
 		}
@@ -142,7 +142,7 @@ func (n *NacosServer) Run(errCh chan error) {
 			nacosv2.WithHealthSvr(n.healthSvr),
 			nacosv2.WithAuthSvr(n.authSvr),
 		)
-		if err := n.v2Svr.Initialize(context.TODO(), n.option, n.httpPort, n.apiConf); err != nil {
+		if err := n.v2Svr.Initialize(context.Background(), n.option, n.httpPort, n.apiConf); err != nil {
 			errCh <- err
 			return
 		}
