@@ -125,7 +125,9 @@ func (n *NacosServer) Run(errCh chan error) {
 			nacosv1.WithHealthSvr(n.healthSvr),
 			nacosv1.WithAuthSvr(n.authSvr),
 		)
-		if err := n.v1Svr.Initialize(context.Background(), n.option, n.httpPort, n.apiConf); err != nil {
+		option := copyOption(n.option)
+		option["listenPort"] = n.httpPort
+		if err := n.v1Svr.Initialize(context.Background(), option, n.httpPort, n.apiConf); err != nil {
 			errCh <- err
 			return
 		}
@@ -142,7 +144,9 @@ func (n *NacosServer) Run(errCh chan error) {
 			nacosv2.WithHealthSvr(n.healthSvr),
 			nacosv2.WithAuthSvr(n.authSvr),
 		)
-		if err := n.v2Svr.Initialize(context.Background(), n.option, n.httpPort, n.apiConf); err != nil {
+		option := copyOption(n.option)
+		option["listenPort"] = n.grpcPort
+		if err := n.v2Svr.Initialize(context.Background(), n.option, n.grpcPort, n.apiConf); err != nil {
 			errCh <- err
 			return
 		}
@@ -150,6 +154,14 @@ func (n *NacosServer) Run(errCh chan error) {
 	}()
 
 	wg.Wait()
+}
+
+func copyOption(m map[string]interface{}) map[string]interface{} {
+	ret := map[string]interface{}{}
+	for k, v := range m {
+		ret[k] = v
+	}
+	return ret
 }
 
 func (n *NacosServer) prepareRun() error {
