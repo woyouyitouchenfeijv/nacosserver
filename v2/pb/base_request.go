@@ -58,6 +58,7 @@ func (r *Request) GetBody(request BaseRequest) string {
 	js, _ := json.Marshal(request)
 	return string(js)
 }
+
 func (r *Request) GetRequestId() string {
 	return r.RequestId
 }

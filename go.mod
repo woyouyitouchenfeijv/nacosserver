@@ -3,7 +3,6 @@ module github.com/pole-group/nacosserver
 go 1.18
 
 require (
-	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2
@@ -12,7 +11,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
-	github.com/nicksnyder/go-i18n/v2 v2.2.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect

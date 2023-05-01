@@ -27,7 +27,6 @@ import (
 	"github.com/polarismesh/polaris/apiserver"
 	"github.com/polarismesh/polaris/auth"
 	api "github.com/polarismesh/polaris/common/api/v1"
-	connhook "github.com/polarismesh/polaris/common/conn/hook"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/metrics"
 	"github.com/polarismesh/polaris/common/secure"
@@ -36,8 +35,6 @@ import (
 	"github.com/polarismesh/polaris/plugin"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
-	"github.com/pole-group/nacosserver/core"
-	nacospb "github.com/pole-group/nacosserver/v2/pb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,6 +42,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"github.com/pole-group/nacosserver/core"
+	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
 
 func NewNacosV2Server(
@@ -162,8 +162,6 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	}
 
 	nacoslog.Infof("[API-Server][NACOS-V2] open connection counter net.Listener")
-	hook := newClientConnHook()
-	listener = connhook.NewHookListener(listener, hook)
 
 	// 指定使用服务端证书创建一个 TLS credentials
 	var creds credentials.TransportCredentials
@@ -180,7 +178,7 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(h.unaryInterceptor),
 		grpc.StreamInterceptor(h.streamInterceptor),
-		grpc.StatsHandler(hook),
+		grpc.StatsHandler(newClientConnHook()),
 	}
 	if creds != nil {
 		// 指定使用 TLS credentials
