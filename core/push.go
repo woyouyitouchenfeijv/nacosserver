@@ -121,7 +121,7 @@ type Subscriber struct {
 type CreatePushCenterFunc func(store *NacosDataStorage) (PushCenter, error)
 
 var (
-	createPushCenterFunc map[PushType]CreatePushCenterFunc
+	createPushCenterFunc map[PushType]CreatePushCenterFunc = map[PushType]CreatePushCenterFunc{}
 )
 
 func RegisterCreatePushCenterFunc(t PushType, f CreatePushCenterFunc) {
