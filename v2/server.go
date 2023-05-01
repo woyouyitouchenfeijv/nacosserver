@@ -73,7 +73,6 @@ type NacosV2Server struct {
 	option          map[string]interface{}
 	openAPI         map[string]apiserver.APIConfig
 	start           bool
-	exitCh          chan struct{}
 
 	protocol string
 
@@ -105,7 +104,7 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 	h.openAPI = apiConf
 
 	h.listenIP = option["listenIP"].(string)
-	h.listenPort = uint32(option["listenPort"].(int))
+	h.listenPort = port
 
 	if raw, _ := option["connLimit"].(map[interface{}]interface{}); raw != nil {
 		connConfig, err := connlimit.ParseConnLimitConfig(raw)
@@ -136,10 +135,8 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 
 // Run 启动GRPC API服务器
 func (h *NacosV2Server) Run(errCh chan error) {
-	h.exitCh = make(chan struct{})
 	h.start = true
 	defer func() {
-		close(h.exitCh)
 		h.start = false
 	}()
 

@@ -72,7 +72,6 @@ type NacosV1Server struct {
 	option          map[string]interface{}
 	openAPI         map[string]apiserver.APIConfig
 	start           bool
-	exitCh          chan struct{}
 
 	server    *http.Server
 	rateLimit plugin.Ratelimit
@@ -114,10 +113,8 @@ func (h *NacosV1Server) Initialize(_ context.Context, option map[string]interfac
 // Run 启动HTTP API服务器
 func (h *NacosV1Server) Run(errCh chan error) {
 	log.Infof("start nacos http server")
-	h.exitCh = make(chan struct{}, 1)
 	h.start = true
 	defer func() {
-		close(h.exitCh)
 		h.start = false
 	}()
 
