@@ -31,7 +31,6 @@ import (
 	api "github.com/polarismesh/polaris/common/api/v1"
 	connhook "github.com/polarismesh/polaris/common/conn/hook"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
-	commonlog "github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/metrics"
 	"github.com/polarismesh/polaris/common/secure"
 	"github.com/polarismesh/polaris/common/utils"
@@ -82,8 +81,6 @@ type NacosV2Server struct {
 	ratelimit  plugin.Ratelimit
 	OpenMethod map[string]bool
 
-	log *commonlog.Scope
-
 	rateLimit plugin.Ratelimit
 	whitelist plugin.Whitelist
 
@@ -131,7 +128,7 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 	}
 
 	if ratelimit := plugin.GetRatelimit(); ratelimit != nil {
-		h.log.Infof("[API-Server] %s server open the ratelimit", h.protocol)
+		nacoslog.Infof("[API-Server] %s server open the ratelimit", h.protocol)
 		h.ratelimit = ratelimit
 	}
 	return nil
@@ -149,7 +146,7 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	address := fmt.Sprintf("%v:%v", h.listenIP, h.listenPort)
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		h.log.Error("[API-Server][NACOS-V2] %v", zap.Error(err))
+		nacoslog.Error("[API-Server][NACOS-V2] %v", zap.Error(err))
 		errCh <- err
 		return
 	}
@@ -157,17 +154,17 @@ func (h *NacosV2Server) Run(errCh chan error) {
 
 	// 如果设置最大连接数
 	if h.connLimitConfig != nil && h.connLimitConfig.OpenConnLimit {
-		h.log.Infof("[API-Server][NACOS-V2] grpc server use max connection limit: %d, grpc max limit: %d",
+		nacoslog.Infof("[API-Server][NACOS-V2] grpc server use max connection limit: %d, grpc max limit: %d",
 			h.connLimitConfig.MaxConnPerHost, h.connLimitConfig.MaxConnLimit)
 		listener, err = connlimit.NewListener(listener, h.protocol, h.connLimitConfig)
 		if err != nil {
-			h.log.Error("[API-Server][NACOS-V2] conn limit init", zap.Error(err))
+			nacoslog.Error("[API-Server][NACOS-V2] conn limit init", zap.Error(err))
 			errCh <- err
 			return
 		}
 	}
 
-	h.log.Infof("[API-Server][NACOS-V2] open connection counter net.Listener")
+	nacoslog.Infof("[API-Server][NACOS-V2] open connection counter net.Listener")
 	hook := newClientConnHook()
 	listener = connhook.NewHookListener(listener, hook)
 
@@ -176,7 +173,7 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	if !h.tlsInfo.IsEmpty() {
 		creds, err = credentials.NewServerTLSFromFile(h.tlsInfo.CertFile, h.tlsInfo.KeyFile)
 		if err != nil {
-			h.log.Error("failed to create credentials: %v", zap.Error(err))
+			nacoslog.Error("failed to create credentials: %v", zap.Error(err))
 			errCh <- err
 			return
 		}
@@ -198,12 +195,12 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	nacospb.RegisterBiRequestStreamServer(h.server, h)
 
 	if err := h.server.Serve(listener); err != nil {
-		h.log.Errorf("[API-Server][NACOS-V2] %v", err)
+		nacoslog.Errorf("[API-Server][NACOS-V2] %v", err)
 		errCh <- err
 		return
 	}
 
-	h.log.Infof("[API-Server] %s server stop", h.protocol)
+	nacoslog.Infof("[API-Server] %s server stop", h.protocol)
 }
 
 var notPrintableMethods map[string]struct{}
@@ -212,7 +209,7 @@ func (b *NacosV2Server) unaryInterceptor(ctx context.Context, req interface{},
 	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (rsp interface{}, err error) {
 	stream := newVirtualStream(ctx,
 		WithVirtualStreamBaseServer(b),
-		WithVirtualStreamLogger(b.log),
+		WithVirtualStreamLogger(nacoslog),
 		WithVirtualStreamMethod(info.FullMethod),
 		WithVirtualStreamPreProcessFunc(b.preprocess),
 		WithVirtualStreamPostProcessFunc(b.postprocess),
@@ -256,7 +253,7 @@ func (b *NacosV2Server) streamInterceptor(srv interface{}, ss grpc.ServerStream,
 		fromError, ok := status.FromError(err)
 		if ok && fromError.Code() == codes.Canceled {
 			// 存在非EOF读错误或者写错误
-			b.log.Info("[API-Server][NACOS-V2] handler stream is canceled by client",
+			nacoslog.Info("[API-Server][NACOS-V2] handler stream is canceled by client",
 				zap.String("client-address", stream.ClientAddress),
 				zap.String("user-agent", stream.UserAgent),
 				utils.ZapRequestID(stream.RequestID),
@@ -265,7 +262,7 @@ func (b *NacosV2Server) streamInterceptor(srv interface{}, ss grpc.ServerStream,
 			)
 		} else {
 			// 存在非EOF读错误或者写错误
-			b.log.Error("[API-Server][NACOS-V2] handler stream",
+			nacoslog.Error("[API-Server][NACOS-V2] handler stream",
 				zap.String("client-address", stream.ClientAddress),
 				zap.String("user-agent", stream.UserAgent),
 				utils.ZapRequestID(stream.RequestID),
@@ -294,7 +291,7 @@ func (b *NacosV2Server) preprocess(stream *VirtualStream, isPrint bool) error {
 
 	if isPrint {
 		// 打印请求
-		b.log.Info("[API-Server][NACOS-V2] receive request",
+		nacoslog.Info("[API-Server][NACOS-V2] receive request",
 			zap.String("client-address", stream.ClientAddress),
 			zap.String("user-agent", stream.UserAgent),
 			utils.ZapRequestID(stream.RequestID),
@@ -314,7 +311,7 @@ func (b *NacosV2Server) postprocess(stream *VirtualStream, m interface{}) {
 
 	// 打印耗时超过1s的请求
 	if diff > time.Second {
-		b.log.Info("[API-Server][NACOS-V2] handling time > 1s",
+		nacoslog.Info("[API-Server][NACOS-V2] handling time > 1s",
 			zap.String("client-address", stream.ClientAddress),
 			zap.String("user-agent", stream.UserAgent),
 			utils.ZapRequestID(stream.RequestID),
@@ -353,13 +350,13 @@ func (h *NacosV2Server) EnterRatelimit(ip string, method string) uint32 {
 
 	// ipRatelimit
 	if ok := h.ratelimit.Allow(plugin.IPRatelimit, ip); !ok {
-		h.log.Error("[API-Server][NACOS-V2] ip ratelimit is not allow", zap.String("client-ip", ip),
+		nacoslog.Error("[API-Server][NACOS-V2] ip ratelimit is not allow", zap.String("client-ip", ip),
 			zap.String("method", method))
 		return api.IPRateLimit
 	}
 	// apiRatelimit
 	if ok := h.ratelimit.Allow(plugin.APIRatelimit, method); !ok {
-		h.log.Error("[API-Server][NACOS-V2] api rate limit is not allow", zap.String("client-ip", ip),
+		nacoslog.Error("[API-Server][NACOS-V2] api rate limit is not allow", zap.String("client-ip", ip),
 			zap.String("method", method))
 		return api.APIRateLimit
 	}
