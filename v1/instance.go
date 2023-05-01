@@ -28,8 +28,8 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
-	"github.com/polaris-contrib/nacosserver/core"
-	"github.com/polaris-contrib/nacosserver/model"
+	"github.com/pole-group/nacosserver/core"
+	"github.com/pole-group/nacosserver/model"
 )
 
 type (

@@ -22,8 +22,8 @@ import (
 
 	"github.com/emicklei/go-restful/v3"
 
-	"github.com/polaris-contrib/nacosserver/core"
-	"github.com/polaris-contrib/nacosserver/model"
+	"github.com/pole-group/nacosserver/core"
+	"github.com/pole-group/nacosserver/model"
 )
 
 func (n *NacosV1Server) GetClientServer() (*restful.WebService, error) {

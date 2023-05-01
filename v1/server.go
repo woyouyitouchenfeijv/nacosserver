@@ -41,9 +41,9 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"go.uber.org/zap"
 
-	"github.com/polaris-contrib/nacosserver/conn/keepalive"
-	"github.com/polaris-contrib/nacosserver/core"
-	"github.com/polaris-contrib/nacosserver/model"
+	"github.com/pole-group/nacosserver/conn/keepalive"
+	"github.com/pole-group/nacosserver/core"
+	"github.com/pole-group/nacosserver/model"
 )
 
 func NewNacosV1Server(

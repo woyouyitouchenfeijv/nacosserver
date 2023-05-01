@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polaris-contrib/nacosserver/core"
-	nacospb "github.com/polaris-contrib/nacosserver/v2/pb"
 	"github.com/polarismesh/polaris/apiserver"
 	"github.com/polarismesh/polaris/auth"
 	api "github.com/polarismesh/polaris/common/api/v1"
@@ -38,6 +36,8 @@ import (
 	"github.com/polarismesh/polaris/plugin"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
+	"github.com/pole-group/nacosserver/core"
+	nacospb "github.com/pole-group/nacosserver/v2/pb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

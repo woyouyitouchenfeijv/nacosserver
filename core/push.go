@@ -25,7 +25,7 @@ import (
 
 	"github.com/polarismesh/polaris/common/model"
 
-	nacosmodel "github.com/polaris-contrib/nacosserver/model"
+	nacosmodel "github.com/pole-group/nacosserver/model"
 )
 
 type PushType string

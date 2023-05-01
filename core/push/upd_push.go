@@ -25,7 +25,7 @@ import (
 
 	commontime "github.com/polarismesh/polaris/common/time"
 
-	"github.com/polaris-contrib/nacosserver/core"
+	"github.com/pole-group/nacosserver/core"
 )
 
 func init() {

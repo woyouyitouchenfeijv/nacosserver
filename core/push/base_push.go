@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polaris-contrib/nacosserver/core"
-	nacosmodel "github.com/polaris-contrib/nacosserver/model"
 	"github.com/polarismesh/polaris/common/model"
+	"github.com/pole-group/nacosserver/core"
+	nacosmodel "github.com/pole-group/nacosserver/model"
 	"go.uber.org/zap"
 )
 
