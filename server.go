@@ -150,7 +150,7 @@ func (n *NacosServer) Run(errCh chan error) {
 			errCh <- err
 			return
 		}
-		n.v1Svr.Run(errCh)
+		n.v2Svr.Run(errCh)
 	}()
 
 	wg.Wait()
