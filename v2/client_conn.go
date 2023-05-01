@@ -102,6 +102,7 @@ func (h *clientConnHook) TagConn(ctx context.Context, connInfo *stats.ConnTagInf
 		h.connections[clientAddr.String()] = client
 	}
 
+	client = h.connections[clientAddr.String()]
 	return context.WithValue(ctx, ConnIDKey{}, client.ID)
 }
 
