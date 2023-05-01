@@ -26,12 +26,27 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+type Service struct {
+	CacheMillis              uint64     `json:"cacheMillis"`
+	Hosts                    []Instance `json:"hosts"`
+	Checksum                 string     `json:"checksum"`
+	LastRefTime              uint64     `json:"lastRefTime"`
+	Clusters                 string     `json:"clusters"`
+	Name                     string     `json:"name"`
+	GroupName                string     `json:"groupName"`
+	Valid                    bool       `json:"valid"`
+	AllIPs                   bool       `json:"allIPs"`
+	ReachProtectionThreshold bool       `json:"reachProtectionThreshold"`
+}
+
 type SimpleServiceInfo struct {
+	Namespace string
 	Name      string `json:"name"`
 	GroupName string `json:"groupName"`
 }
 
 type ServiceInfo struct {
+	Namespace                string      `json:"-"`
 	Name                     string      `json:"name"`
 	GroupName                string      `json:"groupName"`
 	Clusters                 string      `json:"clusters"`

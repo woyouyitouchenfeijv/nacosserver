@@ -31,6 +31,7 @@ import (
 
 	"github.com/polaris-contrib/nacosserver/core"
 	nacosv1 "github.com/polaris-contrib/nacosserver/v1"
+	nacosv2 "github.com/polaris-contrib/nacosserver/v2"
 )
 
 const (
@@ -55,6 +56,7 @@ type NacosServer struct {
 	healthSvr    *healthcheck.Server
 
 	v1Svr *nacosv1.NacosV1Server
+	v2Svr *nacosv2.NacosV2Server
 }
 
 // GetProtocol API协议名
@@ -123,7 +125,27 @@ func (n *NacosServer) Run(errCh chan error) {
 			nacosv1.WithHealthSvr(n.healthSvr),
 			nacosv1.WithAuthSvr(n.authSvr),
 		)
-		n.v1Svr.Initialize(context.TODO(), n.option, n.httpPort, n.apiConf)
+		if err := n.v1Svr.Initialize(context.TODO(), n.option, n.httpPort, n.apiConf); err != nil {
+			errCh <- err
+			return
+		}
+		n.v1Svr.Run(errCh)
+	}()
+
+	go func() {
+		defer wg.Done()
+		n.v2Svr = nacosv2.NewNacosV2Server(n.pushCenter, n.store,
+			nacosv2.WithConnLimitConfig(n.connLimitConfig),
+			nacosv2.WithTLS(n.tlsInfo),
+			nacosv2.WithNamespaceSvr(n.namespaceSvr),
+			nacosv2.WithDiscoverSvr(n.discoverSvr),
+			nacosv2.WithHealthSvr(n.healthSvr),
+			nacosv2.WithAuthSvr(n.authSvr),
+		)
+		if err := n.v2Svr.Initialize(context.TODO(), n.option, n.httpPort, n.apiConf); err != nil {
+			errCh <- err
+			return
+		}
 		n.v1Svr.Run(errCh)
 	}()
 
@@ -151,7 +173,11 @@ func (n *NacosServer) prepareRun() error {
 	if err != nil {
 		return err
 	}
-	n.pushCenter = core.NewPushCenter()
+	n.store = core.NewNacosDataStorage(n.discoverSvr.Cache())
+	n.pushCenter, err = core.NewPushCenter(n.store)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

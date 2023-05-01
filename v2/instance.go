@@ -15,8 +15,12 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package push
+package v2
 
-type GrpcPushCenter struct {
-	*BasePushCenter
+func (h *NacosV2Server) handleRegister() {
+
+}
+
+func (h *NacosV2Server) handleDeregister() {
+
 }

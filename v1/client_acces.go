@@ -21,7 +21,6 @@ import (
 	"net/http"
 
 	"github.com/emicklei/go-restful/v3"
-	httpcommon "github.com/polarismesh/polaris/apiserver/httpserver/http"
 
 	"github.com/polaris-contrib/nacosserver/core"
 	"github.com/polaris-contrib/nacosserver/model"
@@ -54,13 +53,13 @@ func (n *NacosV1Server) addSystemAccess(ws *restful.WebService) {
 }
 
 func (n *NacosV1Server) Login(req *restful.Request, rsp *restful.Response) {
-	handler := httpcommon.Handler{
+	handler := Handler{
 		Request:  req,
 		Response: rsp,
 	}
 
 	ctx := handler.ParseHeaderContext()
-	data, err := n.handleLogin(ctx, httpcommon.ParseQueryParams(req))
+	data, err := n.handleLogin(ctx, ParseQueryParams(req))
 	if err != nil {
 		core.WrirteNacosErrorResponse(err, rsp)
 		return
@@ -69,7 +68,7 @@ func (n *NacosV1Server) Login(req *restful.Request, rsp *restful.Response) {
 }
 
 func (n *NacosV1Server) RegisterInstance(req *restful.Request, rsp *restful.Response) {
-	handler := httpcommon.Handler{
+	handler := Handler{
 		Request:  req,
 		Response: rsp,
 	}
@@ -90,7 +89,7 @@ func (n *NacosV1Server) RegisterInstance(req *restful.Request, rsp *restful.Resp
 }
 
 func (n *NacosV1Server) DeRegisterInstance(req *restful.Request, rsp *restful.Response) {
-	handler := httpcommon.Handler{
+	handler := Handler{
 		Request:  req,
 		Response: rsp,
 	}
@@ -111,7 +110,7 @@ func (n *NacosV1Server) DeRegisterInstance(req *restful.Request, rsp *restful.Re
 }
 
 func (n *NacosV1Server) Heartbeat(req *restful.Request, rsp *restful.Response) {
-	handler := httpcommon.Handler{
+	handler := Handler{
 		Request:  req,
 		Response: rsp,
 	}
@@ -132,13 +131,13 @@ func (n *NacosV1Server) Heartbeat(req *restful.Request, rsp *restful.Response) {
 }
 
 func (n *NacosV1Server) ListInstances(req *restful.Request, rsp *restful.Response) {
-	handler := httpcommon.Handler{
+	handler := Handler{
 		Request:  req,
 		Response: rsp,
 	}
 
 	ctx := handler.ParseHeaderContext()
-	data, err := n.handleQueryInstances(ctx, httpcommon.ParseQueryParams(req))
+	data, err := n.handleQueryInstances(ctx, ParseQueryParams(req))
 	if err != nil {
 		core.WrirteNacosErrorResponse(err, rsp)
 		return

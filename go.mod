@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -17,7 +17,7 @@ require (
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/zap v1.23.0
-	golang.org/x/net v0.2.0 // indirect
+	golang.org/x/net v0.2.0
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/grpc v1.51.0

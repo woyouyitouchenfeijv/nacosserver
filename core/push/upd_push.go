@@ -18,142 +18,87 @@
 package push
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	commontime "github.com/polarismesh/polaris/common/time"
 
 	"github.com/polaris-contrib/nacosserver/core"
 )
 
-type UdpPushCenter struct {
-	lock sync.RWMutex
+func init() {
+	core.RegisterCreatePushCenterFunc(core.UDPCPush, NewUDPPushCenter)
+}
 
-	subscribers map[string]core.Subscriber
-	// connectors namespace -> service -> Connectors
-	connectors map[string]map[string]map[string]*Connector
+func NewUDPPushCenter(store *core.NacosDataStorage) (core.PushCenter, error) {
+	ln, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 0})
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	return &UdpPushCenter{
+		BasePushCenter: newBasePushCenter(store),
+		udpLn:          ln,
+		srcAddr:        ln.LocalAddr().(*net.UDPAddr),
+	}, nil
+}
+
+type UdpPushCenter struct {
+	*BasePushCenter
+	lock    sync.RWMutex
+	udpLn   *net.UDPConn
+	srcAddr *net.UDPAddr
 }
 
 func (p *UdpPushCenter) AddSubscriber(s core.Subscriber) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	id := fmt.Sprintf("%s:%d", s.AddrStr, s.Port)
-	if _, ok := p.subscribers[id]; ok {
+	notifier := newUDPNotifier(s, p.srcAddr)
+	if ok := p.addSubscriber(s, notifier); !ok {
+		_ = notifier.Close()
 		return
 	}
-
-	p.subscribers[id] = s
-
-	if _, ok := p.connectors[s.NamespaceId]; !ok {
-		p.connectors[s.NamespaceId] = map[string]map[string]*Connector{}
-	}
-	if _, ok := p.connectors[s.NamespaceId][s.ServiceName]; !ok {
-		p.connectors[s.NamespaceId][s.ServiceName] = map[string]*Connector{}
-	}
-	if _, ok := p.connectors[s.NamespaceId][s.ServiceName][id]; !ok {
-		conn := newConnector(s)
-		p.connectors[s.NamespaceId][s.ServiceName][id] = conn
+	client := p.getSubscriber(s)
+	if client != nil {
+		client.lastRefreshTime = commontime.CurrentMillisecond()
 	}
 }
 
 func (p *UdpPushCenter) RemoveSubscriber(s core.Subscriber) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	id := fmt.Sprintf("%s:%d", s.AddrStr, s.Port)
-	if _, ok := p.subscribers[id]; !ok {
-		return
-	}
-
-	if _, ok := p.connectors[s.NamespaceId]; ok {
-		if _, ok = p.connectors[s.NamespaceId][s.ServiceName]; ok {
-			if _, ok = p.connectors[s.NamespaceId][s.ServiceName][id]; ok {
-				connections := p.connectors[s.NamespaceId][s.ServiceName]
-				delete(connections, id)
-				p.connectors[s.NamespaceId][s.ServiceName] = connections
-			}
-		}
-	}
-
-	delete(p.subscribers, id)
+	p.removeSubscriber(s)
 }
 
-func (p *UdpPushCenter) enablePush(s core.Subscriber) bool {
+func (p *UdpPushCenter) EnablePush(s core.Subscriber) bool {
 	return core.UDPCPush == s.Type
 }
 
-func (p *UdpPushCenter) Push(d *core.PushData) {
-	namespace := d.Service.Namespace
-	service := d.Service.Name
-
-	connectors := func() map[string]*Connector {
-		p.lock.RLock()
-		defer p.lock.RUnlock()
-
-		if _, ok := p.connectors[namespace]; !ok {
-			return nil
-		}
-		if _, ok := p.connectors[namespace][service]; !ok {
-			return nil
-		}
-		return p.connectors[namespace][service]
-	}()
-
-	data := warpPushData(d)
-	body, err := json.Marshal(data)
-	if err != nil {
-		return
-	}
-
-	body = compressIfNecessary(body)
-
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	for id, conn := range connectors {
-		if conn.isZombie() {
-			// 移除自己
-			conn.close()
-			delete(p.connectors[namespace][service], id)
-			continue
-		}
-		conn.send(body)
-	}
-}
-
-func newConnector(s core.Subscriber) *Connector {
-	connector := &Connector{
+func newUDPNotifier(s core.Subscriber, srcAddr *net.UDPAddr) *UDPNotifier {
+	connector := &UDPNotifier{
 		subscriber: s,
+		srcAddr:    srcAddr,
 	}
-
 	return connector
 }
 
-type Connector struct {
+type UDPNotifier struct {
 	lock        sync.Mutex
 	subscriber  core.Subscriber
 	conn        *net.UDPConn
 	lastRefTime int64
+	srcAddr     *net.UDPAddr
 }
 
-func (c *Connector) doConnect() error {
+func (c *UDPNotifier) doConnect() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if c.conn != nil {
 		return nil
 	}
 
-	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+	conn, err := net.DialUDP("udp", c.srcAddr, &net.UDPAddr{
 		IP:   net.IP(c.subscriber.AddrStr),
 		Port: c.subscriber.Port,
 	})
-
 	if err != nil {
 		return err
 	}
@@ -161,7 +106,22 @@ func (c *Connector) doConnect() error {
 	return nil
 }
 
-func (c *Connector) send(data []byte) {
+func (c *UDPNotifier) Notify(d *core.PushData) {
+	data := d.CompressUDPData
+	if len(data) == 0 {
+		body, err := json.Marshal(d.UDPData)
+		if err != nil {
+			return
+		}
+		data = body
+	}
+	if len(data) == 0 {
+		return
+	}
+	c.send(data)
+}
+
+func (c *UDPNotifier) send(data []byte) {
 	if err := c.doConnect(); err != nil {
 		return
 	}
@@ -171,44 +131,16 @@ func (c *Connector) send(data []byte) {
 	}
 }
 
-func (c *Connector) isZombie() bool {
+func (c *UDPNotifier) IsZombie() bool {
 	return commontime.CurrentMillisecond()-c.lastRefTime > 10*1000
 }
 
-func (c *Connector) close() {
+func (c *UDPNotifier) Close() error {
+	return nil
 }
 
-const (
-	maxDataSizeUncompress = 1024
-)
-
-func compressIfNecessary(data []byte) []byte {
-	if len(data) <= maxDataSizeUncompress {
-		return data
-	}
-
-	var ret bytes.Buffer
-	writer := gzip.NewWriter(&ret)
-	_, err := writer.Write(data)
-	if err != nil {
-		return data
-	}
-	return ret.Bytes()
-}
-
-func warpPushData(p *core.PushData) map[string]interface{} {
-	data := map[string]interface{}{
-		"type": "dom",
-		"data": map[string]interface{}{
-			"dom":             p.Service.Name,
-			"cacheMillis":     p.ServiceInfo.CacheMillis,
-			"lastRefTime":     p.ServiceInfo.LastRefTime,
-			"checksum":        p.ServiceInfo.Checksum,
-			"useSpecifiedURL": false,
-			"hosts":           p.ServiceInfo.Hosts,
-			"metadata":        p.Service.Meta,
-		},
-		"lastRefTime": time.Now().Nanosecond(),
-	}
-	return data
+type UDPAckPacket struct {
+	Type        string
+	LastRefTime int64
+	Data        string
 }

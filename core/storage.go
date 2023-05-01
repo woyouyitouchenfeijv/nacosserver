@@ -33,13 +33,11 @@ import (
 type InstanceFilter func(ctx context.Context, svcInfo *nacosmodel.ServiceInfo,
 	ins []*nacosmodel.Instance, healthyCount int32) *nacosmodel.ServiceInfo
 
-func NewNacosDataStorage(ctx context.Context, cacheMgr *cache.CacheManager) *NacosDataStorage {
-
-	subCtx, cancel := context.WithCancel(ctx)
-
+func NewNacosDataStorage(cacheMgr *cache.CacheManager) *NacosDataStorage {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &NacosDataStorage{
 		cacheMgr:   cacheMgr,
-		ctx:        subCtx,
+		ctx:        ctx,
 		cancel:     cancel,
 		namespaces: map[string]map[string]*ServiceData{},
 	}
@@ -142,15 +140,12 @@ func (n *NacosDataStorage) syncTask() {
 		}
 	}
 
-	svcInfos := make([]nacosmodel.SimpleServiceInfo, 0, len(needSync))
+	svcInfos := make([]*model.Service, 0, len(needSync))
 
 	// 遍历需要 refresh 数据的服务信息列表
 	for _, svc := range needSync {
 		svcData := n.loadNacosService(svc)
-		svcInfos = append(svcInfos, nacosmodel.SimpleServiceInfo{
-			Name:      svcData.name,
-			GroupName: svcData.group,
-		})
+		svcInfos = append(svcInfos, svcData.specService)
 		instances := n.cacheMgr.Instance().GetInstancesByServiceID(svc.ID)
 		svcData.loadInstances(instances)
 	}

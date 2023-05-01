@@ -15,8 +15,14 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package push
+package nacosserver_test
 
-type GrpcPushCenter struct {
-	*BasePushCenter
+import (
+	"testing"
+
+	_ "github.com/polaris-contrib/nacosserver"
+)
+
+func TestMain(m *testing.M) {
+	
 }

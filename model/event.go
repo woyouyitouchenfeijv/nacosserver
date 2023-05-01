@@ -17,10 +17,12 @@
 
 package model
 
+import "github.com/polarismesh/polaris/common/model"
+
 const (
 	NacosServicesChangeEventTopic = "NacosServicesChangeEvent"
 )
 
 type NacosServicesChangeEvent struct {
-	Services []SimpleServiceInfo
+	Services []*model.Service
 }

@@ -17,6 +17,10 @@
 
 package push
 
-type GrpcPushCenter struct {
-	*BasePushCenter
-}
+import (
+	commonlog "github.com/polarismesh/polaris/common/log"
+)
+
+var (
+	log = commonlog.GetScopeOrDefaultByName("nacos-apiserver")
+)

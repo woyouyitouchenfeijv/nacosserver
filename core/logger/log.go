@@ -15,8 +15,16 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package push
+package logger
 
-type GrpcPushCenter struct {
-	*BasePushCenter
+import (
+	commonlog "github.com/polarismesh/polaris/common/log"
+)
+
+var (
+	nacoslog = commonlog.GetScopeOrDefaultByName("nacos-apiserver")
+)
+
+func GetNacosLog() *commonlog.Scope {
+	return nacoslog
 }

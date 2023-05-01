@@ -15,8 +15,22 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package push
+package v2
 
-type GrpcPushCenter struct {
-	*BasePushCenter
+import (
+	"context"
+
+	nacospb "github.com/polaris-contrib/nacosserver/v2/pb"
+)
+
+func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (*nacospb.Payload, error) {
+	return nil, nil
+}
+
+func (h *NacosV2Server) RequestStream(payload *nacospb.Payload, svr nacospb.RequestStream_RequestStreamServer) error {
+	return nil
+}
+
+func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStreamServer) error {
+	return nil
 }

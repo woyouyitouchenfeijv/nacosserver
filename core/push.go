@@ -18,6 +18,11 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
+	"time"
+
 	"github.com/polarismesh/polaris/common/model"
 
 	nacosmodel "github.com/polaris-contrib/nacosserver/model"
@@ -33,13 +38,72 @@ const (
 type PushCenter interface {
 	AddSubscriber(s Subscriber)
 	RemoveSubscriber(s Subscriber)
-	enablePush(s Subscriber) bool
-	Push(d *PushData)
+	EnablePush(s Subscriber) bool
 }
 
 type PushData struct {
-	Service     *model.Service
-	ServiceInfo *nacosmodel.ServiceInfo
+	Service          *model.Service
+	ServiceInfo      *nacosmodel.ServiceInfo
+	UDPData          interface{}
+	CompressUDPData  []byte
+	GRPCData         interface{}
+	CompressGRPCData []byte
+}
+
+func WarpGRPCPushData(p *PushData) {
+	data := map[string]interface{}{
+		"type": "dom",
+		"data": map[string]interface{}{
+			"dom":             p.Service.Name,
+			"cacheMillis":     p.ServiceInfo.CacheMillis,
+			"lastRefTime":     p.ServiceInfo.LastRefTime,
+			"checksum":        p.ServiceInfo.Checksum,
+			"useSpecifiedURL": false,
+			"hosts":           p.ServiceInfo.Hosts,
+			"metadata":        p.Service.Meta,
+		},
+		"lastRefTime": time.Now().Nanosecond(),
+	}
+	p.GRPCData = data
+	body, _ := json.Marshal(data)
+	p.CompressGRPCData = CompressIfNecessary(body)
+}
+
+func WarpUDPPushData(p *PushData) {
+	data := map[string]interface{}{
+		"type": "dom",
+		"data": map[string]interface{}{
+			"dom":             p.Service.Name,
+			"cacheMillis":     p.ServiceInfo.CacheMillis,
+			"lastRefTime":     p.ServiceInfo.LastRefTime,
+			"checksum":        p.ServiceInfo.Checksum,
+			"useSpecifiedURL": false,
+			"hosts":           p.ServiceInfo.Hosts,
+			"metadata":        p.Service.Meta,
+		},
+		"lastRefTime": time.Now().Nanosecond(),
+	}
+	p.UDPData = data
+	body, _ := json.Marshal(data)
+	p.CompressUDPData = CompressIfNecessary(body)
+}
+
+const (
+	maxDataSizeUncompress = 1024
+)
+
+func CompressIfNecessary(data []byte) []byte {
+	if len(data) <= maxDataSizeUncompress {
+		return data
+	}
+
+	var ret bytes.Buffer
+	writer := gzip.NewWriter(&ret)
+	_, err := writer.Write(data)
+	if err != nil {
+		return data
+	}
+	return ret.Bytes()
 }
 
 type Subscriber struct {
@@ -54,17 +118,35 @@ type Subscriber struct {
 	Type        PushType
 }
 
-func NewPushCenter() PushCenter {
-	return &PushCenterProxy{}
+type CreatePushCenterFunc func(store *NacosDataStorage) (PushCenter, error)
+
+var (
+	createPushCenterFunc map[PushType]CreatePushCenterFunc
+)
+
+func RegisterCreatePushCenterFunc(t PushType, f CreatePushCenterFunc) {
+	createPushCenterFunc[t] = f
+}
+
+func NewPushCenter(store *NacosDataStorage) (PushCenter, error) {
+	up, err := createPushCenterFunc[UDPCPush](store)
+	if err != nil {
+		return nil, err
+	}
+	return &PushCenterProxy{
+		store:   store,
+		udpPush: up,
+	}, nil
 }
 
 type PushCenterProxy struct {
+	store    *NacosDataStorage
 	udpPush  PushCenter
 	grpcPush PushCenter
 }
 
 func (p *PushCenterProxy) AddSubscriber(s Subscriber) {
-	if !p.enablePush(s) {
+	if !p.EnablePush(s) {
 		return
 	}
 	switch s.Type {
@@ -77,7 +159,7 @@ func (p *PushCenterProxy) AddSubscriber(s Subscriber) {
 }
 
 func (p *PushCenterProxy) RemoveSubscriber(s Subscriber) {
-	if !p.enablePush(s) {
+	if !p.EnablePush(s) {
 		return
 	}
 	switch s.Type {
@@ -89,18 +171,13 @@ func (p *PushCenterProxy) RemoveSubscriber(s Subscriber) {
 	}
 }
 
-func (p *PushCenterProxy) enablePush(s Subscriber) bool {
+func (p *PushCenterProxy) EnablePush(s Subscriber) bool {
 	switch s.Type {
 	case UDPCPush:
-		return p.udpPush.enablePush(s)
+		return p.udpPush.EnablePush(s)
 	case GRPCPush:
-		return p.grpcPush.enablePush(s)
+		return p.grpcPush.EnablePush(s)
 	default:
 		return false
 	}
-}
-
-func (p *PushCenterProxy) Push(d *PushData) {
-	p.udpPush.Push(d)
-	p.grpcPush.Push(d)
 }

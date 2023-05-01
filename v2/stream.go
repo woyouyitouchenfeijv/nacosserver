@@ -61,7 +61,7 @@ func WithVirtualStreamPostProcessFunc(postprocess PostProcessFunc) initVirtualSt
 }
 
 // WithVirtualStreamBaseServer 设置 BaseGrpcServer
-func WithVirtualStreamBaseServer(server *BaseGrpcServer) initVirtualStream {
+func WithVirtualStreamBaseServer(server *NacosV2Server) initVirtualStream {
 	return func(vStream *VirtualStream) {
 		vStream.server = server
 	}
@@ -122,7 +122,7 @@ func newVirtualStream(ctx context.Context, initOptions ...initVirtualStream) *Vi
 
 // VirtualStream 虚拟Stream 继承ServerStream
 type VirtualStream struct {
-	server *BaseGrpcServer
+	server *NacosV2Server
 
 	Method        string
 	ClientAddress string

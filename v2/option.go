@@ -18,29 +18,48 @@
 package v2
 
 import (
-	commonlog "github.com/polarismesh/polaris/common/log"
-	"github.com/polarismesh/polaris/common/model"
+	"github.com/polarismesh/polaris/auth"
+	connlimit "github.com/polarismesh/polaris/common/conn/limit"
+	"github.com/polarismesh/polaris/common/secure"
+	"github.com/polarismesh/polaris/namespace"
+	"github.com/polarismesh/polaris/service"
+	"github.com/polarismesh/polaris/service/healthcheck"
 )
 
-type InitOption func(svr *BaseGrpcServer)
+type option func(svr *NacosV2Server)
 
-// WithModule set bz module
-func WithModule(bz model.BzModule) InitOption {
-	return func(svr *BaseGrpcServer) {
-		svr.bz = bz
+func WithTLS(tlsInfo *secure.TLSInfo) option {
+	return func(svr *NacosV2Server) {
+		svr.tlsInfo = tlsInfo
 	}
 }
 
-// WithProtocol
-func WithProtocol(protocol string) InitOption {
-	return func(svr *BaseGrpcServer) {
-		svr.protocol = protocol
+func WithConnLimitConfig(connLimitConfig *connlimit.Config) option {
+	return func(svr *NacosV2Server) {
+		svr.connLimitConfig = connLimitConfig
 	}
 }
 
-// WithLogger
-func WithLogger(log *commonlog.Scope) InitOption {
-	return func(svr *BaseGrpcServer) {
-		svr.log = log
+func WithNamespaceSvr(namespaceSvr namespace.NamespaceOperateServer) option {
+	return func(svr *NacosV2Server) {
+		svr.namespaceSvr = namespaceSvr
+	}
+}
+
+func WithDiscoverSvr(discoverSvr service.DiscoverServer) option {
+	return func(svr *NacosV2Server) {
+		svr.discoverSvr = discoverSvr
+	}
+}
+
+func WithHealthSvr(healthSvr *healthcheck.Server) option {
+	return func(svr *NacosV2Server) {
+		svr.healthSvr = healthSvr
+	}
+}
+
+func WithAuthSvr(authSvr auth.AuthServer) option {
+	return func(svr *NacosV2Server) {
+		svr.authSvr = authSvr
 	}
 }

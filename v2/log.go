@@ -17,10 +17,8 @@
 
 package v2
 
-import (
-	commonlog "github.com/polarismesh/polaris/common/log"
-)
+import "github.com/polaris-contrib/nacosserver/core/logger"
 
 var (
-	nacoslog = commonlog.GetScopeOrDefaultByName("nacos-apiserver")
+	nacoslog = logger.GetNacosLog()
 )
