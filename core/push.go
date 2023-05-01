@@ -129,13 +129,29 @@ func RegisterCreatePushCenterFunc(t PushType, f CreatePushCenterFunc) {
 }
 
 func NewPushCenter(store *NacosDataStorage) (PushCenter, error) {
-	up, err := createPushCenterFunc[UDPCPush](store)
-	if err != nil {
-		return nil, err
+	var (
+		err error
+		up  PushCenter = &noopPushCenter{}
+		gp  PushCenter = &noopPushCenter{}
+	)
+	upFunc, ok := createPushCenterFunc[UDPCPush]
+	if ok {
+		up, err = upFunc(store)
+		if err != nil {
+			return nil, err
+		}
+	}
+	gpFunc, ok := createPushCenterFunc[GRPCPush]
+	if ok {
+		gp, err = gpFunc(store)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &PushCenterProxy{
-		store:   store,
-		udpPush: up,
+		store:    store,
+		udpPush:  up,
+		grpcPush: gp,
 	}, nil
 }
 
@@ -180,4 +196,17 @@ func (p *PushCenterProxy) EnablePush(s Subscriber) bool {
 	default:
 		return false
 	}
+}
+
+type noopPushCenter struct {
+}
+
+func (p *noopPushCenter) AddSubscriber(s Subscriber) {
+}
+
+func (p *noopPushCenter) RemoveSubscriber(s Subscriber) {
+}
+
+func (p *noopPushCenter) EnablePush(s Subscriber) bool {
+	return true
 }
