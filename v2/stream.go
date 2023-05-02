@@ -122,6 +122,7 @@ func newVirtualStream(ctx context.Context, initOptions ...initVirtualStream) *Vi
 
 // VirtualStream 虚拟Stream 继承ServerStream
 type VirtualStream struct {
+	ctx    context.Context
 	server *NacosV2Server
 
 	Method        string

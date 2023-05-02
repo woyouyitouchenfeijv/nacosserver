@@ -23,18 +23,12 @@ import (
 	"strconv"
 	"strings"
 
-	commonmodel "github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
 
 	"github.com/pole-group/nacosserver/core"
 	"github.com/pole-group/nacosserver/model"
-)
-
-type (
-	keyHealthyOnly struct{}
-	keyService     struct{}
 )
 
 func (n *NacosV1Server) handleRegister(ctx context.Context, namespace, serviceName string, ins *model.Instance) error {
@@ -95,7 +89,8 @@ func (n *NacosV1Server) handleBeat(ctx context.Context, namespace, service strin
 // handleQueryInstances com.alibaba.nacos.naming.controllers.InstanceController#list
 func (n *NacosV1Server) handleQueryInstances(ctx context.Context, params map[string]string) (interface{}, error) {
 	namespace := params[model.ParamNamespaceID]
-	service := params[model.ParamServiceName]
+	group := model.GetGroupName(params[model.ParamServiceName])
+	service := model.GetServiceName(params[model.ParamServiceName])
 	clusters := params["clusters"]
 	clientIP, _ := params["clientIP"]
 	udpPort, _ := strconv.ParseInt(params["udpPort"], 10, 32)
@@ -110,66 +105,23 @@ func (n *NacosV1Server) handleQueryInstances(ctx context.Context, params map[str
 			Ip:          clientIP,
 			Port:        int(udpPort),
 			NamespaceId: namespace,
-			ServiceName: service,
+			Group:       group,
+			Service:     service,
 			Cluster:     clusters,
 			Type:        core.UDPCPush,
 		})
 	}
 
-	ctx = context.WithValue(ctx, keyHealthyOnly{}, healthyOnly)
+	ctx = context.WithValue(ctx, core.KeyHealthyOnly{}, healthyOnly)
 	// 默认只下发 enable 的实例
-	result := n.store.ListInstances(ctx, commonmodel.ServiceKey{
+	result := n.store.ListInstances(ctx, model.ServiceKey{
 		Namespace: namespace,
+		Group:     group,
 		Name:      service,
-	}, strings.Split(clusters, ","), selectInstancesWithHealthyProtection)
+	}, strings.Split(clusters, ","), core.SelectInstancesWithHealthyProtection)
 
 	// adapt for nacos v1.x SDK
 	result.Name = fmt.Sprintf("%s%s%s", result.Name, model.DefaultNacosGroupConnectStr, result.GroupName)
 
 	return result, nil
-}
-
-func selectInstancesWithHealthyProtection(ctx context.Context, result *model.ServiceInfo,
-	instances []*model.Instance, healthCount int32) *model.ServiceInfo {
-	healthyOnly, _ := ctx.Value(keyHealthyOnly{}).(bool)
-
-	checkProtectThreshold := false
-	protectThreshold := float64(0)
-	svc, _ := ctx.Value(keyService{}).(*commonmodel.Service)
-	if svc != nil {
-		val, ok := svc.Meta[model.InternalNacosServiceProtectThreshold]
-		checkProtectThreshold = ok
-		protectThreshold, _ = strconv.ParseFloat(val, 64)
-	}
-
-	if !checkProtectThreshold || float64(healthCount)/float64(len(instances)) <= protectThreshold {
-		ret := instances
-		if healthyOnly {
-			healthyIns := make([]*model.Instance, 0, len(instances))
-			for i := range instances {
-				if instances[i].Healthy {
-					healthyIns = append(healthyIns, instances[i])
-				}
-			}
-			ret = healthyIns
-		}
-		result.Hosts = ret
-		return result
-	}
-
-	ret := make([]*model.Instance, 0, len(instances))
-
-	for i := range instances {
-		if !instances[i].Healthy {
-			copyIns := instances[i].DeepClone()
-			copyIns.Healthy = true
-			ret = append(ret, copyIns)
-		} else {
-			ret = append(ret, instances[i])
-		}
-	}
-
-	result.ReachProtectionThreshold = true
-	result.Hosts = ret
-	return result
 }

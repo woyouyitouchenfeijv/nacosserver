@@ -19,6 +19,7 @@ package v2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -44,17 +45,16 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/pole-group/nacosserver/core"
+	"github.com/pole-group/nacosserver/core/push"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
 
 func NewNacosV2Server(
-	pushCenter core.PushCenter,
 	store *core.NacosDataStorage,
 	options ...option,
 ) *NacosV2Server {
 	svr := &NacosV2Server{
-		pushCenter: pushCenter,
-		store:      store,
+		store: store,
 	}
 
 	for i := range options {
@@ -73,8 +73,7 @@ type NacosV2Server struct {
 	option          map[string]interface{}
 	openAPI         map[string]apiserver.APIConfig
 	start           bool
-
-	protocol string
+	protocol        string
 
 	server     *grpc.Server
 	ratelimit  plugin.Ratelimit
@@ -83,13 +82,18 @@ type NacosV2Server struct {
 	rateLimit plugin.Ratelimit
 	whitelist plugin.Whitelist
 
-	pushCenter core.PushCenter
-	store      *core.NacosDataStorage
+	clientManager     *ConnectionClientManager
+	connectionManager *ConnectionManager
+	pushCenter        core.PushCenter
+	store             *core.NacosDataStorage
+	inFlights         *InFlights
+	handleRegistry    map[string]*RequestHandlerWarrper
 
-	authSvr      auth.AuthServer
-	namespaceSvr namespace.NamespaceOperateServer
-	discoverSvr  service.DiscoverServer
-	healthSvr    *healthcheck.Server
+	authSvr           auth.AuthServer
+	namespaceSvr      namespace.NamespaceOperateServer
+	discoverSvr       service.DiscoverServer
+	originDiscoverSvr service.DiscoverServer
+	healthSvr         *healthcheck.Server
 }
 
 // GetProtocol 获取Server的协议
@@ -102,9 +106,15 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 	apiConf map[string]apiserver.APIConfig) error {
 	h.option = option
 	h.openAPI = apiConf
-
 	h.listenIP = option["listenIP"].(string)
 	h.listenPort = port
+
+	h.inFlights = &InFlights{inFlights: map[string]*ClientInFlights{}}
+	h.connectionManager = newConnectionManager()
+	h.clientManager = &ConnectionClientManager{
+		clients:     map[string]*ConnectionClient{},
+		inteceptors: []ClientConnectionInterceptor{h},
+	}
 
 	if raw, _ := option["connLimit"].(map[interface{}]interface{}); raw != nil {
 		connConfig, err := connlimit.ParseConnLimitConfig(raw)
@@ -130,6 +140,17 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 		nacoslog.Infof("[API-Server] %s server open the ratelimit", h.protocol)
 		h.ratelimit = ratelimit
 	}
+	grpcPush, err := push.NewGrpcPushCenter(h.store, func(sub core.Subscriber, data *core.PushData) error {
+		client, ok := h.connectionManager.GetClient(sub.ConnID)
+		if !ok {
+			return errors.New("Notify subscriber not found client")
+		}
+		return h.handleNotifySubscriber(context.TODO(), client.Stream, data)
+	})
+	if err != nil {
+		return err
+	}
+	h.pushCenter = grpcPush
 	return nil
 }
 
@@ -178,7 +199,7 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(h.unaryInterceptor),
 		grpc.StreamInterceptor(h.streamInterceptor),
-		grpc.StatsHandler(newClientConnHook()),
+		grpc.StatsHandler(h.connectionManager),
 	}
 	if creds != nil {
 		// 指定使用 TLS credentials
@@ -186,7 +207,6 @@ func (h *NacosV2Server) Run(errCh chan error) {
 	}
 	h.server = grpc.NewServer(opts...)
 	nacospb.RegisterRequestServer(h.server, h)
-	nacospb.RegisterRequestStreamServer(h.server, h)
 	nacospb.RegisterBiRequestStreamServer(h.server, h)
 
 	if err := h.server.Serve(listener); err != nil {
@@ -226,7 +246,7 @@ func (b *NacosV2Server) unaryInterceptor(ctx context.Context, req interface{},
 		if code := b.EnterRatelimit(stream.ClientIP, stream.Method); code != uint32(api.ExecuteSuccess) {
 			return
 		}
-		rsp, err = handler(ctx, req)
+		rsp, err = handler(stream.Context(), req)
 	}()
 
 	b.postprocess(stream, rsp)
@@ -369,7 +389,7 @@ func (h *NacosV2Server) AllowAccess(method string) bool {
 }
 
 // ConvertContext 将GRPC上下文转换成内部上下文
-func ConvertContext(ctx context.Context) context.Context {
+func (h *NacosV2Server) ConvertContext(ctx context.Context) context.Context {
 	var (
 		requestID = ""
 		userAgent = ""
@@ -391,6 +411,8 @@ func ConvertContext(ctx context.Context) context.Context {
 	var (
 		clientIP = ""
 		address  = ""
+		connID   = ""
+		connMeta ConnectionMeta
 	)
 	if pr, ok := peer.FromContext(ctx); ok && pr.Addr != nil {
 		address = pr.Addr.String()
@@ -398,13 +420,36 @@ func ConvertContext(ctx context.Context) context.Context {
 		if len(addrSlice) == 2 {
 			clientIP = addrSlice[0]
 		}
+
+		client, find := h.connectionManager.GetClientByAddr(pr.Addr.String())
+		if find {
+			connID = client.ID
+			connMeta = client.ConnMeta
+		}
 	}
 
 	ctx = context.Background()
 	ctx = context.WithValue(ctx, utils.ContextGrpcHeader, meta)
 	ctx = context.WithValue(ctx, utils.StringContext("request-id"), requestID)
-	ctx = context.WithValue(ctx, utils.StringContext("client-ip"), clientIP)
 	ctx = context.WithValue(ctx, utils.ContextClientAddress, address)
 	ctx = context.WithValue(ctx, utils.StringContext("user-agent"), userAgent)
+	ctx = context.WithValue(ctx, ClientIPKey{}, clientIP)
+	ctx = context.WithValue(ctx, ConnIDKey{}, connID)
+	ctx = context.WithValue(ctx, ConnectionInfoKey{}, connMeta)
 	return ctx
+}
+
+func ValueConnID(ctx context.Context) string {
+	ret, _ := ctx.Value(ConnIDKey{}).(string)
+	return ret
+}
+
+func ValueClientIP(ctx context.Context) string {
+	ret, _ := ctx.Value(ClientIPKey{}).(string)
+	return ret
+}
+
+func ValueConnMeta(ctx context.Context) ConnectionMeta {
+	ret, _ := ctx.Value(ConnectionInfoKey{}).(ConnectionMeta)
+	return ret
 }

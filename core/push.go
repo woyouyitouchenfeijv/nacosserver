@@ -31,14 +31,17 @@ import (
 type PushType string
 
 const (
-	UDPCPush PushType = "udp"
-	GRPCPush PushType = "grpc"
+	NoopPush     PushType = "noop"
+	UDPCPush     PushType = "udp"
+	GRPCPush     PushType = "grpc"
+	AssemblyPush PushType = "assembly"
 )
 
 type PushCenter interface {
 	AddSubscriber(s Subscriber)
 	RemoveSubscriber(s Subscriber)
 	EnablePush(s Subscriber) bool
+	Type() PushType
 }
 
 type PushData struct {
@@ -107,106 +110,15 @@ func CompressIfNecessary(data []byte) []byte {
 }
 
 type Subscriber struct {
+	ConnID      string
 	AddrStr     string
 	Agent       string
 	App         string
 	Ip          string
 	Port        int
 	NamespaceId string
-	ServiceName string
+	Group       string
+	Service     string
 	Cluster     string
 	Type        PushType
-}
-
-type CreatePushCenterFunc func(store *NacosDataStorage) (PushCenter, error)
-
-var (
-	createPushCenterFunc map[PushType]CreatePushCenterFunc = map[PushType]CreatePushCenterFunc{}
-)
-
-func RegisterCreatePushCenterFunc(t PushType, f CreatePushCenterFunc) {
-	createPushCenterFunc[t] = f
-}
-
-func NewPushCenter(store *NacosDataStorage) (PushCenter, error) {
-	var (
-		err error
-		up  PushCenter = &noopPushCenter{}
-		gp  PushCenter = &noopPushCenter{}
-	)
-	upFunc, ok := createPushCenterFunc[UDPCPush]
-	if ok {
-		up, err = upFunc(store)
-		if err != nil {
-			return nil, err
-		}
-	}
-	gpFunc, ok := createPushCenterFunc[GRPCPush]
-	if ok {
-		gp, err = gpFunc(store)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &PushCenterProxy{
-		store:    store,
-		udpPush:  up,
-		grpcPush: gp,
-	}, nil
-}
-
-type PushCenterProxy struct {
-	store    *NacosDataStorage
-	udpPush  PushCenter
-	grpcPush PushCenter
-}
-
-func (p *PushCenterProxy) AddSubscriber(s Subscriber) {
-	if !p.EnablePush(s) {
-		return
-	}
-	switch s.Type {
-	case UDPCPush:
-		p.udpPush.AddSubscriber(s)
-	case GRPCPush:
-		p.grpcPush.AddSubscriber(s)
-	default:
-	}
-}
-
-func (p *PushCenterProxy) RemoveSubscriber(s Subscriber) {
-	if !p.EnablePush(s) {
-		return
-	}
-	switch s.Type {
-	case UDPCPush:
-		p.udpPush.RemoveSubscriber(s)
-	case GRPCPush:
-		p.grpcPush.RemoveSubscriber(s)
-	default:
-	}
-}
-
-func (p *PushCenterProxy) EnablePush(s Subscriber) bool {
-	switch s.Type {
-	case UDPCPush:
-		return p.udpPush.EnablePush(s)
-	case GRPCPush:
-		return p.grpcPush.EnablePush(s)
-	default:
-		return false
-	}
-}
-
-type noopPushCenter struct {
-}
-
-func (p *noopPushCenter) AddSubscriber(s Subscriber) {
-}
-
-func (p *noopPushCenter) RemoveSubscriber(s Subscriber) {
-}
-
-func (p *noopPushCenter) EnablePush(s Subscriber) bool {
-	return true
 }

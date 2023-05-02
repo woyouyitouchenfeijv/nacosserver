@@ -92,7 +92,7 @@ func (r *BatchInstanceRequest) GetRequestType() string {
 
 type NotifySubscriberRequest struct {
 	*NamingRequest
-	ServiceInfo model.Service `json:"serviceInfo"`
+	ServiceInfo model.ServiceInfo `json:"serviceInfo"`
 }
 
 func (r *NotifySubscriberRequest) GetRequestType() string {
@@ -115,4 +115,45 @@ func NewSubscribeServiceRequest(namespace, serviceName, groupName, clusters stri
 
 func (r *SubscribeServiceRequest) GetRequestType() string {
 	return "SubscribeServiceRequest"
+}
+
+type ServiceListRequest struct {
+	*NamingRequest
+	PageNo   int    `json:"pageNo"`
+	PageSize int    `json:"pageSize"`
+	Selector string `json:"selector"`
+}
+
+func NewServiceListRequest(namespace, serviceName, groupName string, pageNo,
+	pageSize int, selector string) *ServiceListRequest {
+	return &ServiceListRequest{
+		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
+		PageNo:        pageNo,
+		PageSize:      pageSize,
+		Selector:      selector,
+	}
+}
+
+func (r *ServiceListRequest) GetRequestType() string {
+	return "ServiceListRequest"
+}
+
+type ServiceQueryRequest struct {
+	*NamingRequest
+	Cluster     string `json:"cluster"`
+	HealthyOnly bool   `json:"healthyOnly"`
+	UdpPort     int    `json:"udpPort"`
+}
+
+func NewServiceQueryRequest(namespace, serviceName, groupName, cluster string, healthyOnly bool, udpPort int) *ServiceQueryRequest {
+	return &ServiceQueryRequest{
+		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
+		Cluster:       cluster,
+		HealthyOnly:   healthyOnly,
+		UdpPort:       udpPort,
+	}
+}
+
+func (r *ServiceQueryRequest) GetRequestType() string {
+	return "ServiceQueryRequest"
 }

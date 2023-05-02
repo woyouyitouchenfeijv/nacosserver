@@ -271,3 +271,17 @@ const (
 	 */
 	ExceptionCode_HttpClientErrorCode ExceptionCode = -500
 )
+
+type ResponseCode NacosErrorCode
+
+var (
+	Response_Success = ResponseCode{
+		Code: 200,
+		Desc: "Response ok",
+	}
+
+	Response_Fail = ResponseCode{
+		Code: 500,
+		Desc: "Response fail",
+	}
+)

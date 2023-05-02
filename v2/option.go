@@ -52,6 +52,12 @@ func WithDiscoverSvr(discoverSvr service.DiscoverServer) option {
 	}
 }
 
+func WithOriginDiscoverSvr(discoverSvr service.DiscoverServer) option {
+	return func(svr *NacosV2Server) {
+		svr.originDiscoverSvr = discoverSvr
+	}
+}
+
 func WithHealthSvr(healthSvr *healthcheck.Server) option {
 	return func(svr *NacosV2Server) {
 		svr.healthSvr = healthSvr

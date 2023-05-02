@@ -17,7 +17,9 @@
 
 package model
 
-import "strings"
+import (
+	"strings"
+)
 
 const (
 	MIME = "application/x-www-form-urlencoded"
@@ -66,17 +68,19 @@ const (
 )
 
 func GetServiceName(s string) string {
-	if !strings.Contains(s, DefaultNacosGroupConnectStr) {
+	s = ReplaceNacosService(s)
+	if !strings.Contains(s, ReplaceNacosGroupConnectStr) {
 		return s
 	}
-	ss := strings.Split(s, DefaultNacosGroupConnectStr)
+	ss := strings.Split(s, ReplaceNacosGroupConnectStr)
 	return ss[1]
 }
 
 func GetGroupName(s string) string {
-	if !strings.Contains(s, DefaultNacosGroupConnectStr) {
+	s = ReplaceNacosService(s)
+	if !strings.Contains(s, ReplaceNacosGroupConnectStr) {
 		return DefaultServiceGroup
 	}
-	ss := strings.Split(s, DefaultNacosGroupConnectStr)
+	ss := strings.Split(s, ReplaceNacosGroupConnectStr)
 	return ss[0]
 }

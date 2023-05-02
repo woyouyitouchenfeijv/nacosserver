@@ -53,14 +53,14 @@ type BasePushCenter struct {
 
 	clients map[string]*WatchClient
 	// notifiers namespace -> service -> notifiers
-	notifiers map[string]map[string]map[string]*WatchClient
+	notifiers map[string]map[nacosmodel.ServiceKey]map[string]*WatchClient
 }
 
 func newBasePushCenter(store *core.NacosDataStorage) *BasePushCenter {
 	pc := &BasePushCenter{
 		store:     store,
 		clients:   map[string]*WatchClient{},
-		notifiers: map[string]map[string]map[string]*WatchClient{},
+		notifiers: map[string]map[nacosmodel.ServiceKey]map[string]*WatchClient{},
 	}
 	go pc.cleanZombieClient()
 	return pc
@@ -82,9 +82,10 @@ func (pc *BasePushCenter) OnEvent(ctx context.Context, any2 any) error {
 	}
 	for i := range event.Services {
 		svc := event.Services[i]
-		svcInfo := pc.store.ListInstances(context.Background(), model.ServiceKey{
+		svcInfo := pc.store.ListInstances(context.Background(), nacosmodel.ServiceKey{
 			Namespace: svc.Namespace,
-			Name:      svc.Name,
+			Group:     nacosmodel.GetGroupName(svc.Name),
+			Name:      nacosmodel.GetServiceName(svc.Name),
 		}, []string{},
 			func(ctx context.Context, svcInfo *nacosmodel.ServiceInfo, ins []*nacosmodel.Instance,
 				healthyCount int32) *nacosmodel.ServiceInfo {
@@ -101,7 +102,11 @@ func (pc *BasePushCenter) OnEvent(ctx context.Context, any2 any) error {
 		}
 		core.WarpGRPCPushData(pushData)
 		core.WarpUDPPushData(pushData)
-		pc.notifyClients(svc.Name, svc.Namespace, func(client *WatchClient) {
+		pc.notifyClients(nacosmodel.ServiceKey{
+			Namespace: svc.Namespace,
+			Group:     nacosmodel.GetGroupName(svc.Name),
+			Name:      nacosmodel.GetServiceName(svc.Name),
+		}, func(client *WatchClient) {
 			client.notifier.Notify(pushData)
 		})
 	}
@@ -126,6 +131,12 @@ func (pc *BasePushCenter) addSubscriber(s core.Subscriber, notifier Notifier) bo
 		return false
 	}
 
+	key := nacosmodel.ServiceKey{
+		Namespace: s.NamespaceId,
+		Group:     s.Group,
+		Name:      s.Service,
+	}
+
 	client := &WatchClient{
 		subscriber: s,
 		notifier:   notifier,
@@ -133,14 +144,14 @@ func (pc *BasePushCenter) addSubscriber(s core.Subscriber, notifier Notifier) bo
 	pc.clients[id] = client
 
 	if _, ok := pc.notifiers[s.NamespaceId]; !ok {
-		pc.notifiers[s.NamespaceId] = map[string]map[string]*WatchClient{}
+		pc.notifiers[s.NamespaceId] = map[nacosmodel.ServiceKey]map[string]*WatchClient{}
 	}
-	if _, ok := pc.notifiers[s.NamespaceId][s.ServiceName]; !ok {
-		pc.notifiers[s.NamespaceId][s.ServiceName] = map[string]*WatchClient{}
+	if _, ok := pc.notifiers[s.NamespaceId][key]; !ok {
+		pc.notifiers[s.NamespaceId][key] = map[string]*WatchClient{}
 	}
-	_, ok := pc.notifiers[s.NamespaceId][s.ServiceName][id]
+	_, ok := pc.notifiers[s.NamespaceId][key][id]
 	if !ok {
-		pc.notifiers[s.NamespaceId][s.ServiceName][id] = client
+		pc.notifiers[s.NamespaceId][key][id] = client
 	}
 	return true
 }
@@ -157,12 +168,18 @@ func (pc *BasePushCenter) removeSubscriber0(s core.Subscriber) {
 		return
 	}
 
+	key := nacosmodel.ServiceKey{
+		Namespace: s.NamespaceId,
+		Group:     s.Group,
+		Name:      s.Service,
+	}
+
 	if _, ok := pc.notifiers[s.NamespaceId]; ok {
-		if _, ok = pc.notifiers[s.NamespaceId][s.ServiceName]; ok {
-			if _, ok = pc.notifiers[s.NamespaceId][s.ServiceName][id]; ok {
-				notifiers := pc.notifiers[s.NamespaceId][s.ServiceName]
+		if _, ok = pc.notifiers[s.NamespaceId][key]; ok {
+			if _, ok = pc.notifiers[s.NamespaceId][key][id]; ok {
+				notifiers := pc.notifiers[s.NamespaceId][key]
 				delete(notifiers, id)
-				pc.notifiers[s.NamespaceId][s.ServiceName] = notifiers
+				pc.notifiers[s.NamespaceId][key] = notifiers
 			}
 		}
 	}
@@ -173,15 +190,15 @@ func (pc *BasePushCenter) removeSubscriber0(s core.Subscriber) {
 	delete(pc.clients, id)
 }
 
-func (pc *BasePushCenter) notifyClients(svcName, namespace string, notify func(client *WatchClient)) {
+func (pc *BasePushCenter) notifyClients(key nacosmodel.ServiceKey, notify func(client *WatchClient)) {
 	pc.lock.RLock()
 	defer pc.lock.RUnlock()
 
-	ns, ok := pc.notifiers[namespace]
+	ns, ok := pc.notifiers[key.Namespace]
 	if !ok {
 		return
 	}
-	clients, ok := ns[svcName]
+	clients, ok := ns[key]
 	if !ok {
 		return
 	}

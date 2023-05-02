@@ -28,10 +28,6 @@ import (
 	"github.com/pole-group/nacosserver/core"
 )
 
-func init() {
-	core.RegisterCreatePushCenterFunc(core.UDPCPush, NewUDPPushCenter)
-}
-
 func NewUDPPushCenter(store *core.NacosDataStorage) (core.PushCenter, error) {
 	ln, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 0})
 	if err != nil {
@@ -69,7 +65,11 @@ func (p *UdpPushCenter) RemoveSubscriber(s core.Subscriber) {
 }
 
 func (p *UdpPushCenter) EnablePush(s core.Subscriber) bool {
-	return core.UDPCPush == s.Type
+	return p.Type() == s.Type
+}
+
+func (p *UdpPushCenter) Type() core.PushType {
+	return core.UDPCPush
 }
 
 func newUDPNotifier(s core.Subscriber, srcAddr *net.UDPAddr) *UDPNotifier {

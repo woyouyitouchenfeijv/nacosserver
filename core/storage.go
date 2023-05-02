@@ -19,6 +19,7 @@ package core
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/polarismesh/polaris/cache"
 	"github.com/polarismesh/polaris/common/eventhub"
 	"github.com/polarismesh/polaris/common/model"
+	commonmodel "github.com/polarismesh/polaris/common/model"
 
 	nacosmodel "github.com/pole-group/nacosserver/model"
 )
@@ -39,7 +41,7 @@ func NewNacosDataStorage(cacheMgr *cache.CacheManager) *NacosDataStorage {
 		cacheMgr:   cacheMgr,
 		ctx:        ctx,
 		cancel:     cancel,
-		namespaces: map[string]map[string]*ServiceData{},
+		namespaces: map[string]map[nacosmodel.ServiceKey]*ServiceData{},
 	}
 }
 
@@ -50,27 +52,25 @@ type NacosDataStorage struct {
 	cancel context.CancelFunc
 
 	lock       sync.RWMutex
-	namespaces map[string]map[string]*ServiceData
+	namespaces map[string]map[nacosmodel.ServiceKey]*ServiceData
 
 	revisions map[string]string
 }
 
 // ListInstances list nacos instances by filter
-func (n *NacosDataStorage) ListInstances(ctx context.Context, svc model.ServiceKey,
+func (n *NacosDataStorage) ListInstances(ctx context.Context, svc nacosmodel.ServiceKey,
 	clusters []string, filter InstanceFilter) *nacosmodel.ServiceInfo {
-	service := nacosmodel.GetServiceName(svc.Name)
-	group := nacosmodel.GetServiceName(svc.Name)
 
 	n.lock.RLock()
 	defer n.lock.RUnlock()
 
 	services, ok := n.namespaces[svc.Namespace]
 	if !ok {
-		return nacosmodel.NewEmptyServiceInfo(service, group)
+		return nacosmodel.NewEmptyServiceInfo(svc.Name, svc.Group)
 	}
-	svcInfo, ok := services[svc.Name]
+	svcInfo, ok := services[svc]
 	if !ok {
-		return nacosmodel.NewEmptyServiceInfo(service, group)
+		return nacosmodel.NewEmptyServiceInfo(svc.Name, svc.Group)
 	}
 
 	clusterSet := make(map[string]struct{})
@@ -85,8 +85,8 @@ func (n *NacosDataStorage) ListInstances(ctx context.Context, svc model.ServiceK
 
 	resultInfo := &nacosmodel.ServiceInfo{
 		CacheMillis:              1000,
-		Name:                     service,
-		GroupName:                group,
+		Name:                     svc.Name,
+		GroupName:                svc.Group,
 		Clusters:                 strings.Join(clusters, ","),
 		ReachProtectionThreshold: false,
 	}
@@ -161,25 +161,23 @@ func (n *NacosDataStorage) loadNacosService(svc *model.Service) *ServiceData {
 	defer n.lock.Unlock()
 
 	if _, ok := n.namespaces[svc.Namespace]; !ok {
-		n.namespaces[svc.Namespace] = map[string]*ServiceData{}
+		n.namespaces[svc.Namespace] = map[nacosmodel.ServiceKey]*ServiceData{}
 	}
 	services := n.namespaces[svc.Namespace]
-	if val, ok := services[svc.Name]; ok {
+
+	key := nacosmodel.ServiceKey{
+		Namespace: svc.Namespace,
+		Group:     nacosmodel.GetGroupName(svc.Name),
+		Name:      nacosmodel.GetServiceName(svc.Name),
+	}
+	if val, ok := services[key]; ok {
 		return val
 	}
 
-	var (
-		name  = svc.Name
-		group = nacosmodel.DefaultServiceGroup
-	)
-	if val, ok := svc.Meta[nacosmodel.InternalNacosServiceType]; ok && val == "true" {
-		name = nacosmodel.GetServiceName(svc.Name)
-		group = nacosmodel.GetGroupName(svc.Name)
-	}
 	return &ServiceData{
 		specService: svc,
-		name:        name,
-		group:       group,
+		name:        key.Name,
+		group:       key.Group,
 		instances:   map[string]*nacosmodel.Instance{},
 	}
 }
@@ -212,4 +210,54 @@ func (s *ServiceData) loadInstances(instances []*model.Instance) {
 	defer s.lock.Unlock()
 	s.instances = finalInstances
 	s.enableInstances = finalEnableInstances
+}
+
+type (
+	KeyHealthyOnly struct{}
+	KeyService     struct{}
+)
+
+func SelectInstancesWithHealthyProtection(ctx context.Context, result *nacosmodel.ServiceInfo,
+	instances []*nacosmodel.Instance, healthCount int32) *nacosmodel.ServiceInfo {
+	healthyOnly, _ := ctx.Value(KeyHealthyOnly{}).(bool)
+
+	checkProtectThreshold := false
+	protectThreshold := float64(0)
+	svc, _ := ctx.Value(KeyService{}).(*commonmodel.Service)
+	if svc != nil {
+		val, ok := svc.Meta[nacosmodel.InternalNacosServiceProtectThreshold]
+		checkProtectThreshold = ok
+		protectThreshold, _ = strconv.ParseFloat(val, 64)
+	}
+
+	if !checkProtectThreshold || float64(healthCount)/float64(len(instances)) <= protectThreshold {
+		ret := instances
+		if healthyOnly {
+			healthyIns := make([]*nacosmodel.Instance, 0, len(instances))
+			for i := range instances {
+				if instances[i].Healthy {
+					healthyIns = append(healthyIns, instances[i])
+				}
+			}
+			ret = healthyIns
+		}
+		result.Hosts = ret
+		return result
+	}
+
+	ret := make([]*nacosmodel.Instance, 0, len(instances))
+
+	for i := range instances {
+		if !instances[i].Healthy {
+			copyIns := instances[i].DeepClone()
+			copyIns.Healthy = true
+			ret = append(ret, copyIns)
+		} else {
+			ret = append(ret, instances[i])
+		}
+	}
+
+	result.ReachProtectionThreshold = true
+	result.Hosts = ret
+	return result
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris/service/healthcheck"
 
 	"github.com/pole-group/nacosserver/core"
+	"github.com/pole-group/nacosserver/core/push"
 	nacosv1 "github.com/pole-group/nacosserver/v1"
 	nacosv2 "github.com/pole-group/nacosserver/v2"
 )
@@ -50,10 +51,11 @@ type NacosServer struct {
 	pushCenter core.PushCenter
 	store      *core.NacosDataStorage
 
-	authSvr      auth.AuthServer
-	namespaceSvr namespace.NamespaceOperateServer
-	discoverSvr  service.DiscoverServer
-	healthSvr    *healthcheck.Server
+	authSvr           auth.AuthServer
+	namespaceSvr      namespace.NamespaceOperateServer
+	discoverSvr       service.DiscoverServer
+	originDiscoverSvr service.DiscoverServer
+	healthSvr         *healthcheck.Server
 
 	v1Svr *nacosv1.NacosV1Server
 	v2Svr *nacosv2.NacosV2Server
@@ -117,14 +119,6 @@ func (n *NacosServer) Run(errCh chan error) {
 
 	go func() {
 		defer wg.Done()
-		n.v1Svr = nacosv1.NewNacosV1Server(n.pushCenter, n.store,
-			nacosv1.WithConnLimitConfig(n.connLimitConfig),
-			nacosv1.WithTLS(n.tlsInfo),
-			nacosv1.WithNamespaceSvr(n.namespaceSvr),
-			nacosv1.WithDiscoverSvr(n.discoverSvr),
-			nacosv1.WithHealthSvr(n.healthSvr),
-			nacosv1.WithAuthSvr(n.authSvr),
-		)
 		option := copyOption(n.option)
 		option["listenPort"] = n.httpPort
 		if err := n.v1Svr.Initialize(context.Background(), option, n.httpPort, n.apiConf); err != nil {
@@ -136,14 +130,6 @@ func (n *NacosServer) Run(errCh chan error) {
 
 	go func() {
 		defer wg.Done()
-		n.v2Svr = nacosv2.NewNacosV2Server(n.pushCenter, n.store,
-			nacosv2.WithConnLimitConfig(n.connLimitConfig),
-			nacosv2.WithTLS(n.tlsInfo),
-			nacosv2.WithNamespaceSvr(n.namespaceSvr),
-			nacosv2.WithDiscoverSvr(n.discoverSvr),
-			nacosv2.WithHealthSvr(n.healthSvr),
-			nacosv2.WithAuthSvr(n.authSvr),
-		)
 		option := copyOption(n.option)
 		option["listenPort"] = n.grpcPort
 		if err := n.v2Svr.Initialize(context.Background(), n.option, n.grpcPort, n.apiConf); err != nil {
@@ -175,6 +161,10 @@ func (n *NacosServer) prepareRun() error {
 	if err != nil {
 		return err
 	}
+	n.originDiscoverSvr, err = service.GetOriginServer()
+	if err != nil {
+		return err
+	}
 
 	n.authSvr, err = auth.GetAuthServer()
 	if err != nil {
@@ -186,10 +176,29 @@ func (n *NacosServer) prepareRun() error {
 		return err
 	}
 	n.store = core.NewNacosDataStorage(n.discoverSvr.Cache())
-	n.pushCenter, err = core.NewPushCenter(n.store)
+	udpPush, err := push.NewUDPPushCenter(n.store)
 	if err != nil {
 		return err
 	}
+	n.v1Svr = nacosv1.NewNacosV1Server(udpPush, n.store,
+		nacosv1.WithConnLimitConfig(n.connLimitConfig),
+		nacosv1.WithTLS(n.tlsInfo),
+		nacosv1.WithNamespaceSvr(n.namespaceSvr),
+		nacosv1.WithDiscoverSvr(n.discoverSvr),
+		nacosv1.WithHealthSvr(n.healthSvr),
+		nacosv1.WithAuthSvr(n.authSvr),
+	)
+
+	n.v2Svr = nacosv2.NewNacosV2Server(n.store,
+		nacosv2.WithConnLimitConfig(n.connLimitConfig),
+		nacosv2.WithTLS(n.tlsInfo),
+		nacosv2.WithNamespaceSvr(n.namespaceSvr),
+		nacosv2.WithDiscoverSvr(n.discoverSvr),
+		nacosv2.WithOriginDiscoverSvr(n.originDiscoverSvr),
+		nacosv2.WithHealthSvr(n.healthSvr),
+		nacosv2.WithAuthSvr(n.authSvr),
+	)
+
 	return nil
 }
 
