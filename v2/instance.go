@@ -27,6 +27,7 @@ import (
 	"github.com/polarismesh/polaris/common/utils"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/pole-group/nacosserver/core"
 	nacosmodel "github.com/pole-group/nacosserver/model"
@@ -45,6 +46,13 @@ func (h *NacosV2Server) handleInstanceRequest(ctx context.Context, req nacospb.B
 		namespace = insReq.Namespace
 	}
 	ins := nacosmodel.PrepareSpecInstance(namespace, insReq.ServiceName, &insReq.Instance)
+	ins.EnableHealthCheck = wrapperspb.Bool(true)
+	ins.HealthCheck = &service_manage.HealthCheck{
+		Type: service_manage.HealthCheck_HEARTBEAT,
+		Heartbeat: &service_manage.HeartbeatHealthCheck{
+			Ttl: wrapperspb.UInt32(1),
+		},
+	}
 
 	var (
 		resp *service_manage.Response
@@ -114,6 +122,13 @@ func (h *NacosV2Server) handleBatchInstanceRequest(ctx context.Context, req naco
 		for i := range batchInsReq.Instances {
 			insReq := batchInsReq.Instances[i]
 			ins := nacosmodel.PrepareSpecInstance(namespace, insReq.ServiceName, &insReq)
+			ins.EnableHealthCheck = wrapperspb.Bool(true)
+			ins.HealthCheck = &service_manage.HealthCheck{
+				Type: service_manage.HealthCheck_HEARTBEAT,
+				Heartbeat: &service_manage.HeartbeatHealthCheck{
+					Ttl: wrapperspb.UInt32(1),
+				},
+			}
 			resp := h.discoverSvr.RegisterInstance(ctx, ins)
 			api.Collect(batchResp, resp)
 			if resp.GetCode().GetValue() == uint32(apimodel.Code_ExecuteSuccess) {
@@ -210,7 +225,7 @@ func (h *NacosV2Server) handleNotifySubscriber(ctx context.Context, svr *SyncSer
 		ConnID:    ValueConnID(ctx),
 		RequestID: req.RequestId,
 		Callback: func(resp nacospb.BaseResponse, err error) {
-
+			// TODO push ack response handle
 		},
 	})
 
@@ -229,14 +244,14 @@ func (h *NacosV2Server) HandleClientDisConnect(ctx context.Context, client *Conn
 				Id: utils.NewStringValue(ids[i]),
 			})
 		}
-		resp := h.originDiscoverSvr.DeleteInstances(ctx, req)
-		if resp.GetCode().GetValue() != uint32(apimodel.Code_ExecuteSuccess) {
-			// TODO log
-		}
 		h.clientManager.delServiceInstance(client.ConnID, model.ServiceKey{
 			Namespace: svc.Namespace,
 			Name:      svc.Name,
 		}, ids...)
+		resp := h.originDiscoverSvr.DeleteInstances(ctx, req)
+		if resp.GetCode().GetValue() != uint32(apimodel.Code_ExecuteSuccess) {
+			// TODO log
+		}
 	})
 }
 

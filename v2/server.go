@@ -111,10 +111,7 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 
 	h.inFlights = &InFlights{inFlights: map[string]*ClientInFlights{}}
 	h.connectionManager = newConnectionManager()
-	h.clientManager = &ConnectionClientManager{
-		clients:     map[string]*ConnectionClient{},
-		inteceptors: []ClientConnectionInterceptor{h},
-	}
+	h.clientManager = newConnectionClientManager(h.healthSvr, []ClientConnectionInterceptor{h})
 
 	if raw, _ := option["connLimit"].(map[interface{}]interface{}); raw != nil {
 		connConfig, err := connlimit.ParseConnLimitConfig(raw)
@@ -141,11 +138,11 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 		h.ratelimit = ratelimit
 	}
 	grpcPush, err := push.NewGrpcPushCenter(h.store, func(sub core.Subscriber, data *core.PushData) error {
-		client, ok := h.connectionManager.GetClient(sub.ConnID)
-		if !ok {
+		stream := h.connectionManager.GetStream(sub.ConnID)
+		if stream == nil {
 			return errors.New("Notify subscriber not found client")
 		}
-		return h.handleNotifySubscriber(context.TODO(), client.Stream, data)
+		return h.handleNotifySubscriber(context.TODO(), stream, data)
 	})
 	if err != nil {
 		return err
@@ -215,7 +212,7 @@ func (h *NacosV2Server) Run(errCh chan error) {
 		return
 	}
 
-	nacoslog.Infof("[API-Server] %s server stop", h.protocol)
+	nacoslog.Infof("[API-Server][NACOS-V2] %s server stop", h.protocol)
 }
 
 var notPrintableMethods map[string]struct{}

@@ -28,8 +28,13 @@ import (
 	"github.com/polarismesh/polaris/common/eventhub"
 	"github.com/polarismesh/polaris/common/model"
 	commontime "github.com/polarismesh/polaris/common/time"
+	"github.com/polarismesh/polaris/common/timewheel"
+	"github.com/polarismesh/polaris/service/healthcheck"
+	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
+	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	nacosmodel "github.com/pole-group/nacosserver/model"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
@@ -325,13 +330,32 @@ type (
 		lock        sync.RWMutex
 		clients     map[string]*ConnectionClient
 		inteceptors []ClientConnectionInterceptor
+		checker     *healthcheck.Server
+		wheel       *timewheel.TimeWheel
 	}
 
 	ClientConnectionInterceptor interface {
 		HandleClientConnect(ctx context.Context, client *ConnectionClient)
 		HandleClientDisConnect(ctx context.Context, client *ConnectionClient)
 	}
+
+	ConnectionClient struct {
+		ConnID           string
+		lock             sync.RWMutex
+		PublishInstances map[model.ServiceKey]map[string]struct{}
+		checker          *healthcheck.Server
+		wheel            *timewheel.TimeWheel
+	}
 )
+
+func newConnectionClientManager(checker *healthcheck.Server,
+	inteceptors []ClientConnectionInterceptor) *ConnectionClientManager {
+	return &ConnectionClientManager{
+		checker: checker,
+		clients: map[string]*ConnectionClient{},
+		wheel:   timewheel.New(time.Second, 128, "nacosv2-beat"),
+	}
+}
 
 // PreProcess do preprocess logic for event
 func (cm *ConnectionClientManager) PreProcess(_ context.Context, a any) any {
@@ -339,33 +363,30 @@ func (cm *ConnectionClientManager) PreProcess(_ context.Context, a any) any {
 }
 
 // OnEvent event process logic
-func (cm *ConnectionClientManager) OnEvent(ctx context.Context, a any) error {
+func (c *ConnectionClientManager) OnEvent(ctx context.Context, a any) error {
 	event, ok := a.(ConnectionEvent)
 	if !ok {
 		return nil
 	}
 	switch event.EventType {
 	case EventClientConnected:
-		cm.lock.Lock()
-		defer cm.lock.Unlock()
-		client := &ConnectionClient{
-			ConnID:           event.ConnID,
-			PublishInstances: map[model.ServiceKey]map[string]struct{}{},
+		c.addConnectionClientIfAbsent(event.ConnID)
+		c.lock.RLock()
+		defer c.lock.RUnlock()
+		client := c.clients[event.ConnID]
+		for i := range c.inteceptors {
+			c.inteceptors[i].HandleClientConnect(ctx, client)
 		}
-		for i := range cm.inteceptors {
-			cm.inteceptors[i].HandleClientConnect(ctx, client)
-		}
-		cm.clients[event.ConnID] = client
 	case EventClientDisConnected:
-		cm.lock.Lock()
-		defer cm.lock.Unlock()
+		c.lock.Lock()
+		defer c.lock.Unlock()
 
-		client, ok := cm.clients[event.ConnID]
+		client, ok := c.clients[event.ConnID]
 		if ok {
-			for i := range cm.inteceptors {
-				cm.inteceptors[i].HandleClientDisConnect(ctx, client)
+			for i := range c.inteceptors {
+				c.inteceptors[i].HandleClientDisConnect(ctx, client)
 			}
-			delete(cm.clients, event.ConnID)
+			delete(c.clients, event.ConnID)
 		}
 	}
 
@@ -373,39 +394,35 @@ func (cm *ConnectionClientManager) OnEvent(ctx context.Context, a any) error {
 }
 
 func (c *ConnectionClientManager) addServiceInstance(connID string, svc model.ServiceKey, instanceIDS ...string) {
+	c.addConnectionClientIfAbsent(connID)
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-
-	if _, ok := c.clients[connID]; !ok {
-		c.clients[connID] = &ConnectionClient{
-			ConnID:           connID,
-			PublishInstances: make(map[model.ServiceKey]map[string]struct{}),
-		}
-	}
-
 	client := c.clients[connID]
 	client.addServiceInstance(svc, instanceIDS...)
 }
 
 func (c *ConnectionClientManager) delServiceInstance(connID string, svc model.ServiceKey, instanceIDS ...string) {
+	c.addConnectionClientIfAbsent(connID)
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-
-	if _, ok := c.clients[connID]; !ok {
-		c.clients[connID] = &ConnectionClient{
-			ConnID:           connID,
-			PublishInstances: make(map[model.ServiceKey]map[string]struct{}),
-		}
-	}
-
 	client := c.clients[connID]
 	client.delServiceInstance(svc, instanceIDS...)
 }
 
-type ConnectionClient struct {
-	ConnID           string
-	lock             sync.RWMutex
-	PublishInstances map[model.ServiceKey]map[string]struct{}
+func (c *ConnectionClientManager) addConnectionClientIfAbsent(connID string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if _, ok := c.clients[connID]; !ok {
+		client := &ConnectionClient{
+			ConnID:           connID,
+			PublishInstances: make(map[model.ServiceKey]map[string]struct{}),
+			checker:          c.checker,
+			wheel:            c.wheel,
+		}
+		c.clients[connID] = client
+		c.wheel.AddTask(uint32(time.Second.Seconds()), nil, client.renewPublishInstances)
+	}
 }
 
 func (c *ConnectionClient) RangePublishInstance(f func(svc model.ServiceKey, ids []string)) {
@@ -451,8 +468,20 @@ func (c *ConnectionClient) delServiceInstance(svc model.ServiceKey, instanceIDS 
 	c.PublishInstances[svc] = publishInfos
 }
 
-// renewPublishInstances 定期上报实例的心跳信息维护实例的健康状态
-// TODO 待设计
-func (c *ConnectionClient) renewPublishInstances() {
+// renewPublishInstances 定期上报实例的心跳信息维护实例的健康状态，1s上报一次
+func (c *ConnectionClient) renewPublishInstances(_ interface{}) {
+	defer func() {
+		c.wheel.AddTask(uint32(time.Second.Seconds()), nil, c.renewPublishInstances)
+	}()
 
+	for _, ids := range c.PublishInstances {
+		for instanceID := range ids {
+			resp := c.checker.Report(context.Background(), &service_manage.Instance{
+				Id: wrapperspb.String(instanceID),
+			})
+			if resp.GetCode().GetValue() != uint32(apimodel.Code_ExecuteSuccess) {
+				// TODO print log
+			}
+		}
+	}
 }
