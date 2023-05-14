@@ -23,6 +23,7 @@ import (
 	"errors"
 	"io"
 
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	nacosmodel "github.com/pole-group/nacosserver/model"
@@ -137,6 +138,7 @@ func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStr
 // UnmarshalPayload .
 func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (RequestHandler, nacospb.CustomerPayload, error) {
 	t := payload.GetMetadata().GetType()
+	nacoslog.Debug("[API-Server][NACOS-V2] unmarshal payload info", zap.String("type", t))
 	handler, ok := h.handleRegistry[t]
 	if !ok {
 		return nil, nil, ErrorNoSuchPayloadType
