@@ -26,6 +26,7 @@ import (
 	"github.com/polarismesh/polaris/common/utils"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	nacosmodel "github.com/pole-group/nacosserver/model"
@@ -181,6 +182,8 @@ func (h *NacosV2Server) HandleClientDisConnect(ctx context.Context, client *Conn
 				Id: utils.NewStringValue(ids[i]),
 			})
 		}
+		nacoslog.Info("[NACOS-V2] receive client disconnect event, do deregist all publish instance",
+			zap.String("conn-id", client.ConnID), zap.Any("svc", svc), zap.Strings("instance-ids", ids))
 		h.clientManager.delServiceInstance(client.ConnID, model.ServiceKey{
 			Namespace: svc.Namespace,
 			Name:      svc.Name,
