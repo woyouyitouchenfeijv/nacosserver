@@ -104,6 +104,7 @@ func newVirtualStream(ctx context.Context, initOptions ...initVirtualStream) *Vi
 	}
 
 	virtualStream := &VirtualStream{
+		ctx:           ctx,
 		ClientAddress: clientAddress,
 		ClientIP:      clientIP,
 		UserAgent:     userAgent,
@@ -168,6 +169,9 @@ func (v *VirtualStream) SetTrailer(md metadata.MD) {
 
 // Context returns the context for this stream.
 func (v *VirtualStream) Context() context.Context {
+	if v.stream == nil {
+		return v.ctx
+	}
 	return v.stream.Context()
 }
 

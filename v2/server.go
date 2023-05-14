@@ -262,7 +262,7 @@ func (b *NacosV2Server) unaryInterceptor(ctx context.Context, req interface{},
 		if code := b.EnterRatelimit(stream.ClientIP, stream.Method); code != uint32(api.ExecuteSuccess) {
 			return
 		}
-		rsp, err = handler(stream.Context(), req)
+		rsp, err = handler(ctx, req)
 	}()
 
 	b.postprocess(stream, rsp)
