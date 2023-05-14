@@ -20,10 +20,12 @@ package nacosserver
 import (
 	"github.com/polarismesh/polaris/apiserver"
 
+	commonlog "github.com/polarismesh/polaris/common/log"
 	_ "github.com/pole-group/nacosserver/core/push"
 )
 
 // init 自注册到API服务器插槽
 func init() {
+	commonlog.RegisterScope("nacos-apiserver", "nacos apiserver plugin", 0)
 	_ = apiserver.Register(ProtooclName, &NacosServer{})
 }
