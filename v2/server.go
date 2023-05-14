@@ -179,6 +179,11 @@ func (h *NacosV2Server) initHandlers() {
 				return nacospb.NewHealthCheckRequest()
 			},
 		},
+		(&nacospb.ConnectionSetupRequest{}).GetRequestType(): {
+			PayloadBuilder: func() nacospb.CustomerPayload {
+				return nacospb.NewConnectionSetupRequest()
+			},
+		},
 	}
 
 	for k := range h.handleRegistry {
@@ -332,20 +337,9 @@ func (b *NacosV2Server) streamInterceptor(srv interface{}, ss grpc.ServerStream,
 // PreProcessFunc preprocess function define
 type PreProcessFunc func(stream *VirtualStream, isPrint bool) error
 
-func (b *NacosV2Server) preprocess(stream *VirtualStream, isPrint bool) error {
+func (b *NacosV2Server) preprocess(stream *VirtualStream, _ bool) error {
 	// 设置开始时间
 	stream.StartTime = time.Now()
-
-	if isPrint {
-		// 打印请求
-		nacoslog.Info("[API-Server][NACOS-V2] receive request",
-			zap.String("client-address", stream.ClientAddress),
-			zap.String("user-agent", stream.UserAgent),
-			utils.ZapRequestID(stream.RequestID),
-			zap.String("method", stream.Method),
-		)
-	}
-
 	return nil
 }
 
@@ -355,17 +349,6 @@ type PostProcessFunc func(stream *VirtualStream, m interface{})
 func (b *NacosV2Server) postprocess(stream *VirtualStream, m interface{}) {
 	// 接口调用统计
 	diff := time.Since(stream.StartTime)
-
-	// 打印耗时超过1s的请求
-	if diff > time.Second {
-		nacoslog.Info("[API-Server][NACOS-V2] handling time > 1s",
-			zap.String("client-address", stream.ClientAddress),
-			zap.String("user-agent", stream.UserAgent),
-			utils.ZapRequestID(stream.RequestID),
-			zap.String("method", stream.Method),
-			zap.Duration("handling-time", diff),
-		)
-	}
 
 	plugin.GetStatis().ReportCallMetrics(metrics.CallMetric{
 		Type:     metrics.ServerCallMetric,

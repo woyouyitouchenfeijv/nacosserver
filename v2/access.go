@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"time"
 
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -60,46 +61,61 @@ func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (
 		zap.String("type", msg.GetRequestType()),
 	)
 	connMeta := ValueConnMeta(ctx)
+
+	startTime := time.Now()
 	resp, err := handle(ctx, msg, nacospb.RequestMeta{
 		ConnectionID:  ValueConnID(ctx),
 		ClientIP:      payload.GetMetadata().GetClientIp(),
 		ClientVersion: connMeta.Version,
 		Labels:        connMeta.Labels,
 	})
+	// 接口调用统计
+	diff := time.Since(startTime)
+	// 打印耗时超过1s的请求
+	if diff > time.Second {
+		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+			utils.ZapRequestID(msg.GetRequestId()),
+			zap.String("type", msg.GetRequestType()),
+			zap.Duration("handling-time", diff),
+		)
+	}
 
 	if err != nil {
-		if nacosErr, ok := err.(*nacosmodel.NacosError); ok {
-			resp = &nacospb.ErrorResponse{
-				Response: &nacospb.Response{
-					ResultCode: int(nacosmodel.Response_Fail.Code),
-					ErrorCode:  int(nacosErr.ErrCode),
-					Success:    false,
-					Message:    nacosErr.ErrMsg,
-				},
-			}
-		} else if nacosErr, ok := err.(*nacosmodel.NacosApiError); ok {
-			resp = &nacospb.ErrorResponse{
-				Response: &nacospb.Response{
-					ResultCode: int(nacosmodel.Response_Fail.Code),
-					ErrorCode:  int(nacosErr.DetailErrCode),
-					Success:    false,
-					Message:    nacosErr.ErrAbstract,
-				},
-			}
-		} else {
-			resp = &nacospb.ErrorResponse{
-				Response: &nacospb.Response{
-					ResultCode: int(nacosmodel.Response_Fail.Code),
-					ErrorCode:  int(nacosmodel.ErrorCode_ServerError.Code),
-					Success:    false,
-					Message:    err.Error(),
-				},
-			}
-		}
+		resp = toNacosErrorResp(err)
 	}
 
 	resp.SetRequestId(msg.GetRequestId())
 	return h.MarshalPayload(resp)
+}
+
+func toNacosErrorResp(err error) nacospb.BaseResponse {
+	if nacosErr, ok := err.(*nacosmodel.NacosError); ok {
+		return &nacospb.ErrorResponse{
+			Response: &nacospb.Response{
+				ResultCode: int(nacosmodel.Response_Fail.Code),
+				ErrorCode:  int(nacosErr.ErrCode),
+				Success:    false,
+				Message:    nacosErr.ErrMsg,
+			},
+		}
+	} else if nacosErr, ok := err.(*nacosmodel.NacosApiError); ok {
+		return &nacospb.ErrorResponse{
+			Response: &nacospb.Response{
+				ResultCode: int(nacosmodel.Response_Fail.Code),
+				ErrorCode:  int(nacosErr.DetailErrCode),
+				Success:    false,
+				Message:    nacosErr.ErrAbstract,
+			},
+		}
+	}
+	return &nacospb.ErrorResponse{
+		Response: &nacospb.Response{
+			ResultCode: int(nacosmodel.Response_Fail.Code),
+			ErrorCode:  int(nacosmodel.ErrorCode_ServerError.Code),
+			Success:    false,
+			Message:    err.Error(),
+		},
+	}
 }
 
 func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStreamServer) error {
