@@ -65,6 +65,7 @@ const (
 	InternalNacosServiceName             = "internal-nacos-service"
 	InternalNacosServiceProtectThreshold = "internal-nacos-protectThreshold"
 	InternalNacosServiceType             = "internal-nacos-service"
+	InternalNacosClientConnectionID      = "internal-nacos-clientconnId"
 )
 
 func GetServiceName(s string) string {

@@ -20,7 +20,6 @@ package v2
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	api "github.com/polarismesh/polaris/common/api/v1"
 	"github.com/polarismesh/polaris/common/model"
@@ -29,7 +28,6 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/pole-group/nacosserver/core"
 	nacosmodel "github.com/pole-group/nacosserver/model"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
@@ -53,6 +51,11 @@ func (h *NacosV2Server) handleInstanceRequest(ctx context.Context, req nacospb.B
 			Ttl: wrapperspb.UInt32(1),
 		},
 	}
+	// TODO: 后续是否可以舍弃由插件 Server 定时进行心跳上报的动作？根据元数据的 Metadata ConnID 进行判断当前的长连接是否存在
+	// 如果对应长连接不存在，则反注册改实例信息数据。
+	// BUT: 一个实例 T1 时刻对应长连接为 Conn-1，T2 时刻对应的长连接为 Conn-2，但是在 T1 ～ T2 之间的某个时刻检测发现长连接不存在
+	// 此时发起一个反注册请求，该请求在 T3 时刻发起，是否会影响 T2 时刻注册上来的实例？
+	ins.Metadata[nacosmodel.InternalNacosClientConnectionID] = ValueConnID(ctx)
 
 	var (
 		resp *service_manage.Response
@@ -164,71 +167,6 @@ func (h *NacosV2Server) handleBatchInstanceRequest(ctx context.Context, req naco
 			Message:    batchResp.GetInfo().GetValue(),
 		},
 	}, nil
-}
-
-func (h *NacosV2Server) handleSubscribeServiceReques(ctx context.Context, req nacospb.BaseRequest,
-	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
-	subReq, ok := req.(*nacospb.SubscribeServiceRequest)
-	if !ok {
-		return nil, ErrorInvalidRequestBodyType
-	}
-	namespace := subReq.Namespace
-	service := subReq.ServiceName
-	group := subReq.GroupName
-
-	subscriber := core.Subscriber{
-		AddrStr:     meta.ClientIP,
-		Agent:       meta.ClientVersion,
-		App:         defaultString(req.GetHeaders()["app"], "unknown"),
-		Ip:          meta.ClientIP,
-		NamespaceId: namespace,
-		Group:       group,
-		Service:     service,
-		Cluster:     subReq.Clusters,
-		Type:        core.GRPCPush,
-	}
-
-	// 默认只下发 enable 的实例
-	result := h.store.ListInstances(ctx, nacosmodel.ServiceKey{
-		Namespace: namespace,
-		Group:     group,
-		Name:      service,
-	}, strings.Split(subReq.Clusters, ","), core.SelectInstancesWithHealthyProtection)
-
-	if subReq.Subscribe {
-		h.pushCenter.AddSubscriber(subscriber)
-	} else {
-		h.pushCenter.RemoveSubscriber(subscriber)
-	}
-
-	return &nacospb.SubscribeServiceResponse{
-		Response: &nacospb.Response{
-			ResultCode: int(nacosmodel.Response_Success.Code),
-			Message:    "success",
-		},
-		ServiceInfo: *result,
-	}, nil
-}
-
-func (h *NacosV2Server) handleNotifySubscriber(ctx context.Context, svr *SyncServerStream,
-	data *core.PushData) error {
-	req := &nacospb.NotifySubscriberRequest{
-		NamingRequest: nacospb.NewNamingRequest(data.ServiceInfo.Namespace,
-			data.ServiceInfo.Name, data.ServiceInfo.GroupName),
-		ServiceInfo: *data.ServiceInfo,
-	}
-	req.RequestId = utils.NewUUID()
-
-	// add inflight first
-	h.inFlights.AddInFlight(&InFlight{
-		ConnID:    ValueConnID(ctx),
-		RequestID: req.RequestId,
-		Callback: func(resp nacospb.BaseResponse, err error) {
-			// TODO push ack response handle
-		},
-	})
-
-	return svr.SendMsg(req)
 }
 
 func (h *NacosV2Server) HandleClientConnect(ctx context.Context, client *ConnectionClient) {

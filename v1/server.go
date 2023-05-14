@@ -197,6 +197,11 @@ func (h *NacosV1Server) createRestfulContainer() (*restful.Container, error) {
 		return nil, err
 	}
 	wsContainer.Add(clientSvc)
+	debugSvc, err := h.GetDebugServer()
+	if err != nil {
+		return nil, err
+	}
+	wsContainer.Add(debugSvc)
 
 	authSvc, err := h.GetAuthServer()
 	if err != nil {

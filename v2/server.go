@@ -173,9 +173,17 @@ func (h *NacosV2Server) initHandlers() {
 				return nacospb.NewServerCheckRequest()
 			},
 		},
+		(&nacospb.HealthCheckRequest{}).GetRequestType(): {
+			Handler: h.handleHealthCheckRequest,
+			PayloadBuilder: func() nacospb.CustomerPayload {
+				return nacospb.NewHealthCheckRequest()
+			},
+		},
 	}
 
-	nacoslog.Info("[API-Server][NACOS-V2] handle registry", zap.Any("info", h.handleRegistry))
+	for k := range h.handleRegistry {
+		nacoslog.Info("[API-Server][NACOS-V2] handle registry", zap.String("type", k))
+	}
 }
 
 // Run 启动GRPC API服务器

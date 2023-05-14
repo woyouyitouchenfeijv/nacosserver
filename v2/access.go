@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/polarismesh/polaris/common/utils"
 	nacosmodel "github.com/pole-group/nacosserver/model"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
@@ -54,7 +55,10 @@ func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (
 	if !ok {
 		return nil, ErrorInvalidRequestBodyType
 	}
-
+	nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+		utils.ZapRequestID(msg.GetRequestId()),
+		zap.String("type", msg.GetRequestType()),
+	)
 	connMeta := ValueConnMeta(ctx)
 	resp, err := handle(ctx, msg, nacospb.RequestMeta{
 		ConnectionID:  ValueConnID(ctx),

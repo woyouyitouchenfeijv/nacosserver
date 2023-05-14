@@ -23,15 +23,18 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/polarismesh/polaris/common/eventhub"
 	"github.com/polarismesh/polaris/common/model"
 	commontime "github.com/polarismesh/polaris/common/time"
 	"github.com/polarismesh/polaris/common/timewheel"
+	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/service/healthcheck"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
 
@@ -46,20 +49,23 @@ type (
 	ClientIPKey       struct{}
 	ConnectionInfoKey struct{}
 
+	// Client
 	Client struct {
 		ID          string
 		Addr        *net.TCPAddr
-		RefreshTime time.Time
+		RefreshTime atomic.Value
 		ConnMeta    ConnectionMeta
 		Stream      *SyncServerStream
 	}
 
+	// ConnectionEvent
 	ConnectionEvent struct {
 		EventType EventType
 		ConnID    string
 		Client    *Client
 	}
 
+	// ConnectionMeta
 	ConnectionMeta struct {
 		ConnectType      string
 		ClientIp         string
@@ -75,21 +81,25 @@ type (
 		ClientAttributes nacospb.ClientAbilities
 	}
 
+	// SyncServerStream
 	SyncServerStream struct {
 		lock   sync.Mutex
 		stream grpc.ServerStream
 	}
 
+	// InFlights
 	InFlights struct {
 		lock      sync.RWMutex
 		inFlights map[string]*ClientInFlights
 	}
 
+	// ClientInFlights
 	ClientInFlights struct {
 		lock      sync.RWMutex
 		inFlights map[string]*InFlight
 	}
 
+	// InFlight
 	InFlight struct {
 		ConnID    string
 		RequestID string
@@ -259,15 +269,18 @@ func (h *ConnectionManager) TagConn(ctx context.Context, connInfo *stats.ConnTag
 	clientAddr := connInfo.RemoteAddr.(*net.TCPAddr)
 	client, ok := h.connections[clientAddr.String()]
 	if !ok {
-		connId := fmt.Sprintf("%d_%s_%d", commontime.CurrentMillisecond(), clientAddr.IP, clientAddr.Port)
+		connId := fmt.Sprintf("%d_%s_%d_%s", commontime.CurrentMillisecond(), clientAddr.IP, clientAddr.Port,
+			utils.LocalHost)
 		client := &Client{
 			ID:          connId,
 			Addr:        clientAddr,
-			RefreshTime: time.Now(),
+			RefreshTime: atomic.Value{},
 		}
-
+		client.RefreshTime.Store(time.Now())
 		h.clients[connId] = client
 		h.connections[clientAddr.String()] = client
+
+		nacoslog.Info("[NACOS-V2][ConnMgr] tag new conn", zap.String("conn-id", connId))
 	}
 
 	client = h.connections[clientAddr.String()]
@@ -281,6 +294,7 @@ func (h *ConnectionManager) HandleConn(ctx context.Context, s stats.ConnStats) {
 	switch s.(type) {
 	case *stats.ConnBegin:
 		connID, _ := ctx.Value(ConnIDKey{}).(string)
+		nacoslog.Info("[NACOS-V2][ConnMgr] grpc conn begin", zap.String("conn-id", connID))
 		eventhub.Publish(ClientConnectionEvent, ConnectionEvent{
 			EventType: EventClientConnected,
 			ConnID:    connID,
@@ -288,6 +302,7 @@ func (h *ConnectionManager) HandleConn(ctx context.Context, s stats.ConnStats) {
 		})
 	case *stats.ConnEnd:
 		connID, _ := ctx.Value(ConnIDKey{}).(string)
+		nacoslog.Info("[NACOS-V2][ConnMgr] grpc conn end", zap.String("conn-id", connID))
 		eventhub.Publish(ClientConnectionEvent, ConnectionEvent{
 			EventType: EventClientDisConnected,
 			ConnID:    connID,
@@ -308,7 +323,7 @@ func (h *ConnectionManager) RefreshClient(ctx context.Context) {
 
 	client, ok := h.clients[connID]
 	if !ok {
-		client.RefreshTime = time.Now()
+		client.RefreshTime.Store(time.Now())
 	}
 }
 
@@ -325,25 +340,33 @@ func (h *ConnectionManager) GetStream(connID string) *SyncServerStream {
 }
 
 type (
+	// ConnectionClientManager
 	ConnectionClientManager struct {
 		lock        sync.RWMutex
-		clients     map[string]*ConnectionClient
+		clients     map[string]*ConnectionClient // ConnID => ConnectionClient
 		inteceptors []ClientConnectionInterceptor
 		checker     *healthcheck.Server
 		wheel       *timewheel.TimeWheel
 	}
 
+	// ClientConnectionInterceptor
 	ClientConnectionInterceptor interface {
+		// HandleClientConnect .
 		HandleClientConnect(ctx context.Context, client *ConnectionClient)
+		// HandleClientDisConnect .
 		HandleClientDisConnect(ctx context.Context, client *ConnectionClient)
 	}
 
+	// ConnectionClient .
 	ConnectionClient struct {
-		ConnID           string
-		lock             sync.RWMutex
+		// ConnID 物理连接唯一ID标识
+		ConnID string
+		lock   sync.RWMutex
+		// PublishInstances 这个连接上发布的实例信息
 		PublishInstances map[model.ServiceKey]map[string]struct{}
 		checker          *healthcheck.Server
 		wheel            *timewheel.TimeWheel
+		destroy          int32
 	}
 )
 
@@ -385,6 +408,7 @@ func (c *ConnectionClientManager) OnEvent(ctx context.Context, a any) error {
 			for i := range c.inteceptors {
 				c.inteceptors[i].HandleClientDisConnect(ctx, client)
 			}
+			client.Destroy()
 			delete(c.clients, event.ConnID)
 		}
 	}
@@ -470,8 +494,13 @@ func (c *ConnectionClient) delServiceInstance(svc model.ServiceKey, instanceIDS 
 // renewPublishInstances 定期上报实例的心跳信息维护实例的健康状态，1s上报一次
 func (c *ConnectionClient) renewPublishInstances(_ interface{}) {
 	defer func() {
+		if c.isDestroy() {
+			return
+		}
 		c.wheel.AddTask(uint32(time.Second.Seconds()), nil, c.renewPublishInstances)
 	}()
+
+	nacoslog.Debug("[NACOS-V2] renew publish instance life", zap.String("conn-id", c.ConnID))
 
 	for _, ids := range c.PublishInstances {
 		records := make([]*service_manage.InstanceHeartbeat, 0, 32)
@@ -485,4 +514,12 @@ func (c *ConnectionClient) renewPublishInstances(_ interface{}) {
 			// TODO print log
 		}
 	}
+}
+
+func (c *ConnectionClient) Destroy() {
+	atomic.StoreInt32(&c.destroy, 1)
+}
+
+func (c *ConnectionClient) isDestroy() bool {
+	return atomic.LoadInt32(&c.destroy) == 1
 }

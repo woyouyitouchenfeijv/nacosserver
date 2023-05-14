@@ -18,9 +18,9 @@
 package push
 
 import (
-	commonlog "github.com/polarismesh/polaris/common/log"
+	"github.com/pole-group/nacosserver/core/logger"
 )
 
 var (
-	log = commonlog.GetScopeOrDefaultByName("nacos-apiserver")
+	log = logger.GetNacosLog()
 )

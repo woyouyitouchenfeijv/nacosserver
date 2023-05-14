@@ -15,15 +15,18 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package nacosserver
+package v2
 
 import (
-	"github.com/polarismesh/polaris/apiserver"
+	"context"
 
-	_ "github.com/pole-group/nacosserver/core/push"
+	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
 
-// init 自注册到API服务器插槽
-func init() {
-	_ = apiserver.Register(ProtooclName, &NacosServer{})
+func (h *NacosV2Server) handleHealthCheckRequest(ctx context.Context, req nacospb.BaseRequest,
+	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
+	if _, ok := req.(*nacospb.HealthCheckRequest); !ok {
+		return nil, ErrorInvalidRequestBodyType
+	}
+	return nacospb.NewHealthCheckResponse(), nil
 }

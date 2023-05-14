@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	nacoslog = commonlog.GetScopeOrDefaultByName("nacos-apiserver")
+	nacoslog = commonlog.RegisterScope("nacos-apiserver", "nacos apiserver plugin", 0)
 )
 
 func GetNacosLog() *commonlog.Scope {

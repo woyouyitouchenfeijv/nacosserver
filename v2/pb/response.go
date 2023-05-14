@@ -161,6 +161,18 @@ func (c *NotifySubscriberResponse) GetResponseType() string {
 	return "NotifySubscriberResponse"
 }
 
+func NewHealthCheckResponse() *HealthCheckResponse {
+	return &HealthCheckResponse{
+		Response: &Response{
+			ResultCode: 0,
+			ErrorCode:  0,
+			Success:    true,
+			Message:    "success",
+			RequestId:  "",
+		},
+	}
+}
+
 type HealthCheckResponse struct {
 	*Response
 }
