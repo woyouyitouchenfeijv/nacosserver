@@ -87,6 +87,19 @@ func (c *ClientDetectionResponse) GetResponseType() string {
 	return "ClientDetectionResponse"
 }
 
+func NewServerCheckResponse() *ServerCheckResponse {
+	return &ServerCheckResponse{
+		Response: &Response{
+			ResultCode: 0,
+			ErrorCode:  0,
+			Success:    true,
+			Message:    "success",
+			RequestId:  "",
+		},
+		ConnectionId: "",
+	}
+}
+
 type ServerCheckResponse struct {
 	*Response
 	ConnectionId string `json:"connectionId"`

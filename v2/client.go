@@ -28,7 +28,7 @@ func (h *NacosV2Server) handleServerCheckRequest(ctx context.Context, req nacosp
 	if _, ok := req.(*nacospb.ServerCheckRequest); !ok {
 		return nil, ErrorInvalidRequestBodyType
 	}
-	return &nacospb.ServerCheckResponse{
-		ConnectionId: ValueConnID(ctx),
-	}, nil
+	resp := nacospb.NewServerCheckResponse()
+	resp.ConnectionId = ValueConnID(ctx)
+	return resp, nil
 }
