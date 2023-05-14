@@ -34,7 +34,6 @@ import (
 	"github.com/polarismesh/specification/source/go/api/v1/service_manage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	nacosmodel "github.com/pole-group/nacosserver/model"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
@@ -475,13 +474,15 @@ func (c *ConnectionClient) renewPublishInstances(_ interface{}) {
 	}()
 
 	for _, ids := range c.PublishInstances {
+		records := make([]*service_manage.InstanceHeartbeat, 0, 32)
 		for instanceID := range ids {
-			resp := c.checker.Report(context.Background(), &service_manage.Instance{
-				Id: wrapperspb.String(instanceID),
+			records = append(records, &service_manage.InstanceHeartbeat{
+				InstanceId: instanceID,
 			})
-			if resp.GetCode().GetValue() != uint32(apimodel.Code_ExecuteSuccess) {
-				// TODO print log
-			}
+		}
+		resp := c.checker.Reports(context.Background(), records)
+		if resp.GetCode().GetValue() != uint32(apimodel.Code_ExecuteSuccess) {
+			// TODO print log
 		}
 	}
 }

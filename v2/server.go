@@ -148,7 +148,26 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 		return err
 	}
 	h.pushCenter = grpcPush
+	h.initHandlers()
 	return nil
+}
+
+// initHandlers .
+func (h *NacosV2Server) initHandlers() {
+	h.handleRegistry = map[string]*RequestHandlerWarrper{
+		(&nacospb.InstanceRequest{}).GetRequestType(): {
+			Handler: h.handleInstanceRequest,
+			PayloadBuilder: func() nacospb.CustomerPayload {
+				return &nacospb.InstanceRequest{}
+			},
+		},
+		(&nacospb.BatchInstanceRequest{}).GetRequestType(): {
+			Handler: h.handleBatchInstanceRequest,
+			PayloadBuilder: func() nacospb.CustomerPayload {
+				return &nacospb.BatchInstanceRequest{}
+			},
+		},
+	}
 }
 
 // Run 启动GRPC API服务器

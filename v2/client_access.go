@@ -134,6 +134,7 @@ func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStr
 	}
 }
 
+// UnmarshalPayload .
 func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (RequestHandler, nacospb.CustomerPayload, error) {
 	t := payload.GetMetadata().GetType()
 	handler, ok := h.handleRegistry[t]
@@ -147,6 +148,7 @@ func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (RequestHandl
 	return handler.Handler, msg, nil
 }
 
+// MarshalPayload .
 func (h *NacosV2Server) MarshalPayload(resp nacospb.BaseResponse) (*nacospb.Payload, error) {
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -162,21 +164,4 @@ func (h *NacosV2Server) MarshalPayload(resp nacospb.BaseResponse) (*nacospb.Payl
 	}
 
 	return payload, nil
-}
-
-func (h *NacosV2Server) initHandlers() {
-	h.handleRegistry = map[string]*RequestHandlerWarrper{
-		(&nacospb.InstanceRequest{}).GetRequestType(): {
-			Handler: h.handleInstanceRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return &nacospb.InstanceRequest{}
-			},
-		},
-		(&nacospb.BatchInstanceRequest{}).GetRequestType(): {
-			Handler: h.handleBatchInstanceRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return &nacospb.BatchInstanceRequest{}
-			},
-		},
-	}
 }

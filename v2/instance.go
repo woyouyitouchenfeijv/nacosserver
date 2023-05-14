@@ -181,7 +181,6 @@ func (h *NacosV2Server) handleSubscribeServiceReques(ctx context.Context, req na
 		Agent:       meta.ClientVersion,
 		App:         defaultString(req.GetHeaders()["app"], "unknown"),
 		Ip:          meta.ClientIP,
-		Port:        0,
 		NamespaceId: namespace,
 		Group:       group,
 		Service:     service,
