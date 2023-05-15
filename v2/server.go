@@ -155,6 +155,7 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 // initHandlers .
 func (h *NacosV2Server) initHandlers() {
 	h.handleRegistry = map[string]*RequestHandlerWarrper{
+		// Request
 		(&nacospb.InstanceRequest{}).GetRequestType(): {
 			Handler: h.handleInstanceRequest,
 			PayloadBuilder: func() nacospb.CustomerPayload {
@@ -179,9 +180,15 @@ func (h *NacosV2Server) initHandlers() {
 				return nacospb.NewHealthCheckRequest()
 			},
 		},
+		// RequestBiStream
 		(&nacospb.ConnectionSetupRequest{}).GetRequestType(): {
 			PayloadBuilder: func() nacospb.CustomerPayload {
 				return nacospb.NewConnectionSetupRequest()
+			},
+		},
+		(&nacospb.SubscribeServiceResponse{}).GetResponseType(): {
+			PayloadBuilder: func() nacospb.CustomerPayload {
+				return &nacospb.SubscribeServiceResponse{}
 			},
 		},
 	}

@@ -444,7 +444,7 @@ func (c *ConnectionClientManager) addConnectionClientIfAbsent(connID string) {
 			wheel:            c.wheel,
 		}
 		c.clients[connID] = client
-		c.wheel.AddTask(uint32(time.Second.Seconds()), nil, client.renewPublishInstances)
+		c.wheel.AddTask(1000, nil, client.renewPublishInstances)
 	}
 }
 
@@ -497,10 +497,12 @@ func (c *ConnectionClient) renewPublishInstances(_ interface{}) {
 		if c.isDestroy() {
 			return
 		}
-		c.wheel.AddTask(uint32(time.Second.Seconds()), nil, c.renewPublishInstances)
+		c.wheel.AddTask(1000, nil, c.renewPublishInstances)
 	}()
 
-	nacoslog.Debug("[NACOS-V2] renew publish instance life", zap.String("conn-id", c.ConnID))
+	if nacoslog.DebugEnabled() {
+		nacoslog.Debug("[NACOS-V2] renew publish instance life", zap.String("conn-id", c.ConnID))
+	}
 
 	for _, ids := range c.PublishInstances {
 		records := make([]*service_manage.InstanceHeartbeat, 0, 32)

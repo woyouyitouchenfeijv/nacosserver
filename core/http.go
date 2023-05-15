@@ -23,16 +23,19 @@ import (
 	"github.com/emicklei/go-restful/v3"
 )
 
+// WrirteSimpleResponse .
 func WrirteSimpleResponse(data string, code int, resp *restful.Response) {
 	resp.WriteHeader(code)
 	resp.Write([]byte(data))
 }
 
+// WrirteNacosResponse .
 func WrirteNacosResponse(data interface{}, resp *restful.Response) {
 	resp.WriteHeader(http.StatusOK)
 	resp.WriteAsJson(data)
 }
 
+// WrirteNacosErrorResponse .
 func WrirteNacosErrorResponse(data error, resp *restful.Response) {
 
 }

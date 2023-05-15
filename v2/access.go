@@ -46,6 +46,12 @@ type (
 	}
 )
 
+var (
+	debugLevel = map[string]struct{}{
+		"HealthCheckRequest": {},
+	}
+)
+
 func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (*nacospb.Payload, error) {
 	h.connectionManager.RefreshClient(ctx)
 	handle, val, err := h.UnmarshalPayload(payload)
@@ -56,10 +62,20 @@ func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (
 	if !ok {
 		return nil, ErrorInvalidRequestBodyType
 	}
-	nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
-		utils.ZapRequestID(msg.GetRequestId()),
-		zap.String("type", msg.GetRequestType()),
-	)
+
+	if _, ok := debugLevel[msg.GetRequestType()]; !ok {
+		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+			utils.ZapRequestID(msg.GetRequestId()),
+			zap.String("type", msg.GetRequestType()),
+		)
+	} else {
+		if nacoslog.DebugEnabled() {
+			nacoslog.Debug("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+				utils.ZapRequestID(msg.GetRequestId()),
+				zap.String("type", msg.GetRequestType()),
+			)
+		}
+	}
 	connMeta := ValueConnMeta(ctx)
 
 	startTime := time.Now()
@@ -141,13 +157,20 @@ func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStr
 		if err != nil {
 			return err
 		}
-
 		switch msg := val.(type) {
 		case *nacospb.ConnectionSetupRequest:
+			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", ValueConnID(ctx)),
+				utils.ZapRequestID(msg.GetRequestId()),
+				zap.String("type", msg.GetRequestType()),
+			)
 			if err := h.connectionManager.RegisterConnection(ctx, req, msg); err != nil {
 				return err
 			}
 		case nacospb.BaseResponse:
+			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", ValueConnID(ctx)),
+				utils.ZapRequestID(msg.GetRequestId()),
+				zap.String("resp-type", msg.GetResponseType()),
+			)
 			// notify ack msg to callback
 			h.inFlights.NotifyInFlight(connID, msg)
 			h.connectionManager.RefreshClient(ctx)
