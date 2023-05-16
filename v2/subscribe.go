@@ -82,7 +82,7 @@ func (h *NacosV2Server) handleNotifySubscriber(ctx context.Context, svr *SyncSer
 	req.RequestId = utils.NewUUID()
 
 	// add inflight first
-	h.inFlights.AddInFlight(&InFlight{
+	_ = h.inFlights.AddInFlight(&InFlight{
 		ConnID:    ValueConnID(ctx),
 		RequestID: req.RequestId,
 		Callback: func(resp nacospb.BaseResponse, err error) {

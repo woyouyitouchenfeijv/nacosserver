@@ -51,6 +51,7 @@ func (r *Response) SetRequestId(requestId string) {
 }
 
 func (r *Response) GetBody() string {
+	//nolint:errchkjson
 	data, _ := json.Marshal(r)
 	return string(data)
 }

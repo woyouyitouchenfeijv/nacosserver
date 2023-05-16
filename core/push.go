@@ -68,6 +68,7 @@ func WarpGRPCPushData(p *PushData) {
 		"lastRefTime": time.Now().Nanosecond(),
 	}
 	p.GRPCData = data
+	//nolint:errchkjson
 	body, _ := json.Marshal(data)
 	p.CompressGRPCData = CompressIfNecessary(body)
 }
@@ -87,6 +88,7 @@ func WarpUDPPushData(p *PushData) {
 		"lastRefTime": time.Now().Nanosecond(),
 	}
 	p.UDPData = data
+	//nolint:errchkjson
 	body, _ := json.Marshal(data)
 	p.CompressUDPData = CompressIfNecessary(body)
 }

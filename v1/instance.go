@@ -92,7 +92,7 @@ func (n *NacosV1Server) handleQueryInstances(ctx context.Context, params map[str
 	group := model.GetGroupName(params[model.ParamServiceName])
 	service := model.GetServiceName(params[model.ParamServiceName])
 	clusters := params["clusters"]
-	clientIP, _ := params["clientIP"]
+	clientIP := params["clientIP"]
 	udpPort, _ := strconv.ParseInt(params["udpPort"], 10, 32)
 	healthyOnly, _ := strconv.ParseBool(params["healthyOnly"])
 

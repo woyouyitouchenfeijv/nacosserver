@@ -122,6 +122,7 @@ func (r *Request) GetHeaders() map[string]string {
 }
 
 func (r *Request) GetBody(request BaseRequest) string {
+	//nolint:errchkjson
 	js, _ := json.Marshal(request)
 	return string(js)
 }

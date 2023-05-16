@@ -60,10 +60,11 @@ type InstanceRequest struct {
 	Instance model.Instance `json:"instance"`
 }
 
-func NewInstanceRequest(namespace, serviceName, groupName, Type string, instance model.Instance) *InstanceRequest {
+func NewInstanceRequest(namespace, serviceName, groupName, reqType string,
+	instance model.Instance) *InstanceRequest {
 	return &InstanceRequest{
 		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
-		Type:          Type,
+		Type:          reqType,
 		Instance:      instance,
 	}
 }
@@ -78,10 +79,11 @@ type BatchInstanceRequest struct {
 	Instances []model.Instance `json:"instances"`
 }
 
-func NewBatchInstanceRequest(namespace, serviceName, groupName, Type string, instances []model.Instance) *BatchInstanceRequest {
+func NewBatchInstanceRequest(namespace, serviceName, groupName, reqType string,
+	instances []model.Instance) *BatchInstanceRequest {
 	return &BatchInstanceRequest{
 		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
-		Type:          Type,
+		Type:          reqType,
 		Instances:     instances,
 	}
 }
@@ -105,7 +107,8 @@ type SubscribeServiceRequest struct {
 	Clusters  string `json:"clusters"`
 }
 
-func NewSubscribeServiceRequest(namespace, serviceName, groupName, clusters string, subscribe bool) *SubscribeServiceRequest {
+func NewSubscribeServiceRequest(namespace, serviceName, groupName, clusters string,
+	subscribe bool) *SubscribeServiceRequest {
 	return &SubscribeServiceRequest{
 		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
 		Subscribe:     subscribe,
@@ -145,7 +148,8 @@ type ServiceQueryRequest struct {
 	UdpPort     int    `json:"udpPort"`
 }
 
-func NewServiceQueryRequest(namespace, serviceName, groupName, cluster string, healthyOnly bool, udpPort int) *ServiceQueryRequest {
+func NewServiceQueryRequest(namespace, serviceName, groupName, cluster string, healthyOnly bool,
+	udpPort int) *ServiceQueryRequest {
 	return &ServiceQueryRequest{
 		NamingRequest: NewNamingRequest(namespace, serviceName, groupName),
 		Cluster:       cluster,

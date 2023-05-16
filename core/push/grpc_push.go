@@ -73,7 +73,7 @@ type GRPCNotifier struct {
 }
 
 func (c *GRPCNotifier) Notify(d *core.PushData) {
-	c.sender(c.subscriber, d)
+	_ = c.sender(c.subscriber, d)
 }
 
 func (c *GRPCNotifier) IsZombie() bool {

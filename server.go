@@ -72,7 +72,8 @@ func (n *NacosServer) GetPort() uint32 {
 }
 
 // Initialize API初始化逻辑
-func (n *NacosServer) Initialize(ctx context.Context, option map[string]interface{}, apiConf map[string]apiserver.APIConfig) error {
+func (n *NacosServer) Initialize(ctx context.Context, option map[string]interface{},
+	apiConf map[string]apiserver.APIConfig) error {
 	n.option = option
 	n.apiConf = apiConf
 	listenPort, _ := option["listenPort"].(int64)
@@ -210,7 +211,8 @@ func (n *NacosServer) Stop() {
 }
 
 // Restart 重启API
-func (n *NacosServer) Restart(option map[string]interface{}, api map[string]apiserver.APIConfig, errCh chan error) error {
+func (n *NacosServer) Restart(option map[string]interface{}, api map[string]apiserver.APIConfig,
+	errCh chan error) error {
 	// TODO not support
 	return nil
 }

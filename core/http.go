@@ -26,13 +26,13 @@ import (
 // WrirteSimpleResponse .
 func WrirteSimpleResponse(data string, code int, resp *restful.Response) {
 	resp.WriteHeader(code)
-	resp.Write([]byte(data))
+	_, _ = resp.Write([]byte(data))
 }
 
 // WrirteNacosResponse .
 func WrirteNacosResponse(data interface{}, resp *restful.Response) {
 	resp.WriteHeader(http.StatusOK)
-	resp.WriteAsJson(data)
+	_ = resp.WriteAsJson(data)
 }
 
 // WrirteNacosErrorResponse .

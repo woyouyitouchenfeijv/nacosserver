@@ -19,14 +19,15 @@ package v2
 
 import (
 	"github.com/emicklei/go-restful/v3"
+
 	v1 "github.com/pole-group/nacosserver/v1"
 )
 
 func (n *NacosV2Server) RegistryDebugRoute() {
-	v1.RegistryDebugRoute("DescribeConnections", func(ws *restful.WebService) *restful.RouteBuilder {
+	_ = v1.RegistryDebugRoute("DescribeConnections", func(ws *restful.WebService) *restful.RouteBuilder {
 		return ws.GET("/2.x/connections").To(n.DescribeConnections)
 	})
-	v1.RegistryDebugRoute("DescribeConnectionDetail", func(ws *restful.WebService) *restful.RouteBuilder {
+	_ = v1.RegistryDebugRoute("DescribeConnectionDetail", func(ws *restful.WebService) *restful.RouteBuilder {
 		return ws.GET("/2.x/connections/detail").To(n.DescribeConnectionDetail)
 	})
 }

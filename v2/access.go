@@ -24,10 +24,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/polarismesh/polaris/common/utils"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/polarismesh/polaris/common/utils"
 	nacosmodel "github.com/pole-group/nacosserver/model"
 	nacospb "github.com/pole-group/nacosserver/v2/pb"
 )
